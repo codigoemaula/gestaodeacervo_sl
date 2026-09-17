@@ -3,6 +3,8 @@ name: Build Sala Leitura APK
 on:
   push:
     branches: [main]
+  issues:
+    types: [opened]
   workflow_dispatch:
 
 permissions:
