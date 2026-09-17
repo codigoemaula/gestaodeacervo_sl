@@ -30,7 +30,7 @@ jobs:
         with:
           gradle-version: '9.6.0'
 
-      - name: Ensure Android SDK 37
+      - name: Ensure Android SDK 36
         shell: bash
         run: |
           set -euo pipefail
@@ -40,7 +40,12 @@ jobs:
           fi
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
-          "$SDKMANAGER" 'platforms;android-37' 'build-tools;36.0.0'
+          if [ ! -d "${ANDROID_HOME}/platforms/android-36" ]; then
+            "$SDKMANAGER" 'platforms;android-36'
+          fi
+          if [ ! -d "${ANDROID_HOME}/build-tools/36.0.0" ]; then
+            "$SDKMANAGER" 'build-tools;36.0.0'
+          fi
 
       - name: Reconstruct and verify source
         shell: bash
@@ -54,7 +59,25 @@ jobs:
           tar -xzf /tmp/SalaLeitura.tar.gz -C /tmp/SalaLeitura
           test -f /tmp/SalaLeitura/settings.gradle.kts
           test -f /tmp/SalaLeitura/app/build.gradle.kts
-          grep -nE 'compileSdk|targetSdk|minSdk' /tmp/SalaLeitura/app/build.gradle.kts
+
+      - name: Apply API 36 compatible AndroidX set
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE=/tmp/SalaLeitura/app/build.gradle.kts
+          sed -i 's/compileSdk = 37/compileSdk = 36/' "$FILE"
+          sed -i 's/compose-bom:2026.08.00/compose-bom:2025.08.00/' "$FILE"
+          sed -i 's/navigation-compose:2.10.1/navigation-compose:2.9.5/' "$FILE"
+          sed -i 's/lifecycle-runtime-compose:2.10.0/lifecycle-runtime-compose:2.9.4/' "$FILE"
+          sed -i 's/lifecycle-viewmodel-compose:2.10.0/lifecycle-viewmodel-compose:2.9.4/' "$FILE"
+          sed -i 's/room-runtime:2.8.5/room-runtime:2.8.1/' "$FILE"
+          sed -i 's/room-ktx:2.8.5/room-ktx:2.8.1/' "$FILE"
+          sed -i 's/room-compiler:2.8.5/room-compiler:2.8.1/' "$FILE"
+          sed -i 's/camera-core:1.6.2/camera-core:1.5.1/' "$FILE"
+          sed -i 's/camera-camera2:1.6.2/camera-camera2:1.5.1/' "$FILE"
+          sed -i 's/camera-lifecycle:1.6.2/camera-lifecycle:1.5.1/' "$FILE"
+          sed -i 's/camera-view:1.6.2/camera-view:1.5.1/' "$FILE"
+          grep -nE 'compileSdk|targetSdk|minSdk|compose-bom|navigation-compose|lifecycle-.*-compose|room-|camera-' "$FILE"
 
       - name: Build debug APK
         working-directory: /tmp/SalaLeitura
