@@ -60,6 +60,15 @@ jobs:
           test -f /tmp/SalaLeitura/settings.gradle.kts
           test -f /tmp/SalaLeitura/app/build.gradle.kts
 
+      - name: Apply Kotlin source fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -R ci/overlay/. /tmp/SalaLeitura/
+          grep -n 'AuditLogEntity(' /tmp/SalaLeitura/app/src/main/java/br/gov/sp/sme/salaleitura/data/repository/CirculationRepository.kt
+          grep -n 'Result<.*> = withContext' /tmp/SalaLeitura/app/src/main/java/br/gov/sp/sme/salaleitura/feature/backup/BackupManager.kt
+          grep -n 'onFinished = {' /tmp/SalaLeitura/app/src/main/java/br/gov/sp/sme/salaleitura/ui/navigation/AppNav.kt
+
       - name: Apply API 36 compatible AndroidX set
         shell: bash
         run: |
