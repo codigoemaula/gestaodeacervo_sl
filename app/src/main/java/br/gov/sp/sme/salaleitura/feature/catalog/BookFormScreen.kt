@@ -22,7 +22,7 @@ fun BookFormScreen(onBack: () -> Unit, onScan: () -> Unit, vm: CatalogViewModel 
             Text("Leia o ISBN para preencher automaticamente os dados disponíveis. Confira as informações antes de salvar.",
                 style = MaterialTheme.typography.bodyMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(s.isbn, { v -> vm.update { it.copy(isbn = v, existingEditionId = null, metadataSource = null) } },
+                OutlinedTextField(s.isbn, { v -> vm.update { it.withIsbnInput(v) } },
                     label = { Text("ISBN/EAN") }, singleLine = true, modifier = Modifier.weight(1f))
                 FilledTonalButton(onClick = onScan) { Text("Câmera") }
             }
