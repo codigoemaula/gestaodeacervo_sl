@@ -8,6 +8,7 @@ import br.gov.sp.sme.salaleitura.core.logic.IsbnResult
 import br.gov.sp.sme.salaleitura.data.local.AppDatabase
 import br.gov.sp.sme.salaleitura.data.local.entity.BookEditionEntity
 import br.gov.sp.sme.salaleitura.data.remote.BookMetadata
+import br.gov.sp.sme.salaleitura.data.remote.MetadataLookupResult
 import br.gov.sp.sme.salaleitura.data.repository.CatalogRepository
 import br.gov.sp.sme.salaleitura.data.repository.CopyIdentityRepository
 import br.gov.sp.sme.salaleitura.data.repository.MetadataRepository
@@ -85,16 +86,24 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 )
                 return@launch
             }
-            val bibliographic = runCatching { metadataRepo.lookup(valid.isbn13) }.getOrNull()
+            val result = runCatching { metadataRepo.lookupDetailed(valid.isbn13) }.getOrElse {
+                MetadataLookupResult.Unavailable(listOf("consulta bibliográfica"), emptyList())
+            }
             if (revision != lookupRevision) return@launch
-            _form.value = if (bibliographic == null) _form.value.copy(
-                isbn = valid.isbn13, loadingMetadata = false,
-                error = "Não foi possível obter dados bibliográficos deste ISBN. Confira sua conexão ou preencha manualmente; nenhum título foi inventado.",
-                existingEditionId = null
-            ) else applyMetadata(_form.value, bibliographic).copy(
-                loadingMetadata = false, isbn = valid.isbn13, existingEditionId = null,
-                metadataSource = bibliographic.source, error = null
-            )
+            _form.value = when (result) {
+                is MetadataLookupResult.Found -> applyMetadata(_form.value, result.book).copy(
+                    loadingMetadata = false, isbn = valid.isbn13, existingEditionId = null,
+                    metadataSource = result.book.source, error = null
+                )
+                is MetadataLookupResult.Missing -> _form.value.copy(
+                    isbn = valid.isbn13, loadingMetadata = false, existingEditionId = null,
+                    error = "As fontes consultadas (${result.searchedSources.joinToString()}) não localizaram este ISBN. Ele pode constar em outros catálogos; preencha manualmente ou tente outro registro da edição."
+                )
+                is MetadataLookupResult.Unavailable -> _form.value.copy(
+                    isbn = valid.isbn13, loadingMetadata = false, existingEditionId = null,
+                    error = "Consulta incompleta: ${result.failedSources.joinToString()} indisponível(is). Verifique a conexão e tente novamente. Isto não significa que o livro não exista."
+                )
+            }
         }
     }
 
@@ -126,7 +135,13 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun applyScannedIsbn(value: String) { update { it.copy(isbn = value) }; lookupMetadata() }
+    fun applyScannedIsbn(value: String) {
+        val previous = _form.value
+        _form.value = if (previous.isbn == value) previous.copy(error = null) else BookFormState(
+            isbn = value, location = previous.location, quantity = previous.quantity
+        )
+        lookupMetadata()
+    }
 
     private fun applyMetadata(s: BookFormState, m: BookMetadata) = s.copy(
         title = m.title, subtitle = m.subtitle.orEmpty(), authors = m.authors.joinToString("; "), publisher = m.publisher.orEmpty(),
