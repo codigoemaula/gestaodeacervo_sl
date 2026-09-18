@@ -12,7 +12,7 @@ import org.junit.Test
 class ImportScanBackupTest {
     @Test fun csvUnderstandsQuotedNamesAndRejectsMissingType() {
         val good = CsvImporter.parse("""nome,tipo,identificador,turma,ano,turno,funcao
-Ana Silva,ESTUDANTE,123,7A,7,MATUTINO,
+Ana Silva,ESTUDANTE,123,7A,2026,MATUTINO,
 "João, Souza",PROFISSIONAL,RF99,,,,Professor""".trimIndent())
         assertTrue(good.errors.isEmpty())
         assertEquals("João, Souza", good.rows[1].name)
