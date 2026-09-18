@@ -44,6 +44,7 @@ private fun CameraPreview(modifier: Modifier, onScanned: (ScanResult) -> Unit) {
     DisposableEffect(Unit) { onDispose { analyzer.close(); executor.shutdown() } }
     AndroidView(factory = { ctx ->
         PreviewView(ctx).also { view ->
+            view.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             val providerFuture = ProcessCameraProvider.getInstance(context)
             providerFuture.addListener({
                 val provider = providerFuture.get()
