@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import br.gov.sp.sme.salaleitura.data.local.AppDatabase
+import br.gov.sp.sme.salaleitura.data.repository.MetadataRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,15 +18,16 @@ data class UniversalScanUi(
     val resolving: Boolean = false
 )
 
-/** Resolve a single scan against local records; no write is made by recognition. */
+/** Resolve a scan against stored records or public bibliographic data; recognition never records a loan. */
 class UniversalScannerViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.get(application)
+    private val metadata = MetadataRepository(db)
     private val _scan = MutableStateFlow<UniversalScanUi?>(null)
     val scan: StateFlow<UniversalScanUi?> = _scan.asStateFlow()
 
     fun accept(result: ScanResult) {
-        if (_scan.value != null) return // Keep focus on the current bottom panel until dismissed.
-        _scan.value = UniversalScanUi("Identificando código", "Consultando os registros deste aparelho…", "", emptyList(), true)
+        if (_scan.value != null) return
+        _scan.value = UniversalScanUi("Identificando código", "Consultando o acervo e os dados bibliográficos…", "", emptyList(), true)
         viewModelScope.launch {
             val resolved = runCatching {
                 when (result) {
@@ -52,12 +54,22 @@ class UniversalScannerViewModel(application: Application) : AndroidViewModel(app
                     }
                     is ScanResult.Isbn -> {
                         val edition = db.catalogDao().editionByIsbn13(result.isbn13)
-                        UniversalScanUi(
-                            title = edition?.title ?: "ISBN identificado",
-                            description = if (edition != null) "Esta edição já consta do acervo. Confira antes de acrescentar exemplares." else "ISBN ${result.isbn13} · Obra ainda não cadastrada",
+                        if (edition != null) UniversalScanUi(
+                            title = edition.title,
+                            description = "${edition.authors} · Esta edição já está cadastrada. O cadastro acrescentará exemplares sem duplicá-la.",
                             code = result.isbn13,
                             actions = listOf(UniversalScanAction.REGISTER_ISBN, UniversalScanAction.CATALOG)
-                        )
+                        ) else {
+                            // Resolving from the scanner seeds the same persistent cache used by the form.
+                            val book = metadata.lookup(result.isbn13)
+                            val (title, description) = BookScanSummary.from(book)
+                            UniversalScanUi(
+                                title = title,
+                                description = "ISBN ${result.isbn13} · $description",
+                                code = result.isbn13,
+                                actions = listOf(UniversalScanAction.REGISTER_ISBN, UniversalScanAction.CATALOG)
+                            )
+                        }
                     }
                     is ScanResult.Unknown -> {
                         val copy = db.catalogDao().copyByCode(result.raw)
