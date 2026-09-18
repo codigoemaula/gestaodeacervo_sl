@@ -22,6 +22,7 @@ interface LoanDao {
     @Query("""SELECT l.id AS loanId, p.name AS personName, p.internalCode AS personCode, c.internalCode AS copyCode, e.title AS bookTitle, l.loanedAt AS loanedAt, l.dueAt AS dueAt, l.loanPeriodDays AS loanPeriodDays FROM loans l JOIN people p ON p.id=l.personId JOIN book_copies c ON c.id=l.copyId JOIN book_editions e ON e.id=c.editionId WHERE l.returnedAt IS NULL ORDER BY l.dueAt""") fun observeActiveLoanRows(): Flow<List<ActiveLoanRow>>
     @Query("SELECT COUNT(*) FROM loans WHERE returnedAt IS NULL") suspend fun activeCount(): Int
     @Query("SELECT COUNT(*) FROM loans WHERE returnedAt IS NULL AND dueAt < :now") suspend fun overdueCount(now: Long): Int
+    @Query("SELECT COUNT(*) FROM loans WHERE returnedAt IS NULL AND dueAt BETWEEN :start AND :end") suspend fun dueBetween(start: Long, end: Long): Int
     @Query("SELECT COUNT(*) FROM loans WHERE returnedAt BETWEEN :start AND :end") suspend fun returnedBetween(start: Long, end: Long): Int
     @Query("UPDATE loans SET dueAt=:dueAt, loanPeriodDays=:periodDays WHERE id=:loanId") suspend fun updateDueDate(loanId: Long, dueAt: Long, periodDays: Int)
     @Query("UPDATE loans SET returnedAt=:returnedAt, returnStatus=:returnStatus WHERE id=:loanId") suspend fun closeLoan(loanId: Long, returnedAt: Long, returnStatus: CopyStatus)
