@@ -18,7 +18,7 @@ import br.gov.sp.sme.salaleitura.data.local.entity.*
         MetadataCacheEntity::class, IsbnRangeDataEntity::class, SyncStatusEntity::class,
         AuditLogEntity::class, AppSettingsEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -39,14 +39,18 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_copy_aliases_normalizedCode` ON `copy_aliases` (`normalizedCode`)")
             }
         }
+        // Existing loans and people keep their primary keys; photographs are never mandatory.
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `people` ADD COLUMN `photoFilename` TEXT")
+            }
+        }
         @Volatile private var instance: AppDatabase? = null
 
         fun get(context: Context): AppDatabase = instance ?: synchronized(this) {
-            instance ?: Room.databaseBuilder(
-                context.applicationContext,
-                AppDatabase::class.java,
-                DB_NAME
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            instance ?: Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, DB_NAME)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .build().also { instance = it }
         }
 
         fun closeInstance() = synchronized(this) {
