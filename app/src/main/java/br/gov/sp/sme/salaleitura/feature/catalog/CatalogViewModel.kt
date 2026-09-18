@@ -1,0 +1,88 @@
+package br.gov.sp.sme.salaleitura.feature.catalog
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import br.gov.sp.sme.salaleitura.core.logic.Isbn
+import br.gov.sp.sme.salaleitura.core.logic.IsbnResult
+import br.gov.sp.sme.salaleitura.data.local.AppDatabase
+import br.gov.sp.sme.salaleitura.data.local.entity.BookEditionEntity
+import br.gov.sp.sme.salaleitura.data.remote.BookMetadata
+import br.gov.sp.sme.salaleitura.data.repository.CatalogRepository
+import br.gov.sp.sme.salaleitura.data.repository.MetadataRepository
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
+
+data class BookFormState(
+    val isbn: String = "", val title: String = "", val subtitle: String = "", val authors: String = "", val publisher: String = "",
+    val publicationYear: String = "", val language: String = "pt-BR", val pageCount: String = "", val subjects: String = "", val series: String = "",
+    val cdd: String = "", val cdu: String = "", val location: String = "", val quantity: String = "1", val error: String? = null,
+    val loadingMetadata: Boolean = false, val saved: Boolean = false, val existingEditionId: Long? = null
+)
+
+class CatalogViewModel(application: Application) : AndroidViewModel(application) {
+    private val db = AppDatabase.get(application)
+    private val catalogRepo = CatalogRepository(db)
+    private val metadataRepo = MetadataRepository(db)
+    val editions = db.catalogDao().observeEditions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _form = MutableStateFlow(BookFormState())
+    val form: StateFlow<BookFormState> = _form.asStateFlow()
+
+    fun update(transform: (BookFormState) -> BookFormState) { _form.value = transform(_form.value).copy(error = null) }
+
+    fun lookupMetadata() {
+        val current = _form.value
+        val valid = Isbn.normalize(current.isbn)
+        if (valid !is IsbnResult.Valid) { _form.value = current.copy(error = (valid as IsbnResult.Invalid).reason); return }
+        viewModelScope.launch {
+            _form.value = _form.value.copy(loadingMetadata = true)
+            val local = db.catalogDao().editionByIsbn13(valid.isbn13)
+            if (local != null) {
+                _form.value = _form.value.copy(
+                    isbn = valid.isbn13, title = local.title, subtitle = local.subtitle.orEmpty(), authors = local.authors,
+                    publisher = local.publisher.orEmpty(), publicationYear = local.publicationYear?.toString().orEmpty(),
+                    language = local.language.orEmpty().ifBlank { "pt-BR" }, pageCount = local.pageCount?.toString().orEmpty(),
+                    subjects = local.subjects.orEmpty(), series = local.series.orEmpty(), cdd = local.cdd.orEmpty(), cdu = local.cdu.orEmpty(),
+                    existingEditionId = local.id, loadingMetadata = false, error = null
+                )
+                return@launch
+            }
+            val metadata = metadataRepo.lookup(valid.isbn13)
+            _form.value = if (metadata == null) _form.value.copy(loadingMetadata = false, error = "Metadados não encontrados; preencha manualmente", existingEditionId = null)
+            else applyMetadata(_form.value, metadata).copy(loadingMetadata = false, isbn = valid.isbn13, existingEditionId = null)
+        }
+    }
+
+    fun save() {
+        val s = _form.value; val q = s.quantity.toIntOrNull() ?: 0
+        if (s.title.isBlank()) { _form.value = s.copy(error = "Informe o título"); return }
+        if (q !in 1..999) { _form.value = s.copy(error = "Quantidade deve estar entre 1 e 999"); return }
+        val isbnResult = s.isbn.takeIf(String::isNotBlank)?.let(Isbn::normalize)
+        if (isbnResult is IsbnResult.Invalid) { _form.value = s.copy(error = isbnResult.reason); return }
+        val valid = isbnResult as? IsbnResult.Valid
+        viewModelScope.launch {
+            runCatching {
+                val existing = s.existingEditionId ?: valid?.isbn13?.let { db.catalogDao().editionByIsbn13(it)?.id }
+                if (existing != null) {
+                    catalogRepo.addCopies(existing, q, s.location.trim().ifBlank { null }, System.currentTimeMillis())
+                    existing
+                } else catalogRepo.createEditionWithCopies(
+                    BookEditionEntity(
+                        isbn10 = valid?.isbn10, isbn13 = valid?.isbn13, title = s.title.trim(), subtitle = s.subtitle.trim().ifBlank { null },
+                        authors = s.authors.trim(), publisher = s.publisher.trim().ifBlank { null }, publicationYear = s.publicationYear.toIntOrNull(),
+                        language = s.language.trim().ifBlank { null }, subjects = s.subjects.trim().ifBlank { null }, pageCount = s.pageCount.toIntOrNull(),
+                        series = s.series.trim().ifBlank { null }, cdd = s.cdd.trim().ifBlank { null }, cdu = s.cdu.trim().ifBlank { null }, createdAt = System.currentTimeMillis()
+                    ), q, s.location.trim().ifBlank { null }, System.currentTimeMillis()
+                )
+            }.onSuccess { _form.value = _form.value.copy(saved = true) }
+             .onFailure { _form.value = _form.value.copy(error = it.message ?: "Falha ao salvar") }
+        }
+    }
+
+    fun applyScannedIsbn(value: String) { update { it.copy(isbn = value) }; lookupMetadata() }
+
+    private fun applyMetadata(s: BookFormState, m: BookMetadata) = s.copy(
+        title = m.title, subtitle = m.subtitle.orEmpty(), authors = m.authors.joinToString("; "), publisher = m.publisher.orEmpty(),
+        publicationYear = m.publicationYear?.toString().orEmpty(), language = m.language ?: s.language, pageCount = m.pageCount?.toString().orEmpty(), subjects = m.subjects.joinToString("; ")
+    )
+}
