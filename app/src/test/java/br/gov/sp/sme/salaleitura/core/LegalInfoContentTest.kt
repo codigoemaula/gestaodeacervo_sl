@@ -13,7 +13,7 @@ class LegalInfoContentTest {
         assertTrue(text.contains("endereço IP"))
         assertTrue(text.contains("Exportações"))
         assertTrue(text.contains("foto"))
-        assertFalse(text.contains("isento da LGPD", ignoreCase = true))
+        assertTrue(text.contains("não significa estar isento da LGPD", ignoreCase = true))
     }
 
     @Test fun `about credits independent project without institutional endorsement`() {
