@@ -16,12 +16,18 @@ class CopyIdentityRepository(private val db: AppDatabase) {
         require(db.peopleDao().personByCode(code) == null) { "Código reservado a um leitor" }
         db.aliasDao().removeForCopy(copyId)
         db.aliasDao().add(CopyAliasEntity(copyId, code))
-        db.systemDao().insertAudit(AuditLogEntity(System.currentTimeMillis(), "BIND_PATRIMONY", "BOOK_COPY", copyId.toString(), "patrimony=$code"))
+        db.systemDao().insertAudit(AuditLogEntity(
+            timestamp = System.currentTimeMillis(), action = "BIND_PATRIMONY", entityType = "BOOK_COPY",
+            entityId = copyId.toString(), details = "patrimony=$code"
+        ))
         code
     }
 
     suspend fun unlinkPatrimony(copyId: Long) = db.withTransaction {
         db.aliasDao().removeForCopy(copyId)
-        db.systemDao().insertAudit(AuditLogEntity(System.currentTimeMillis(), "UNLINK_PATRIMONY", "BOOK_COPY", copyId.toString(), "schoolCodeUnlinked=true"))
+        db.systemDao().insertAudit(AuditLogEntity(
+            timestamp = System.currentTimeMillis(), action = "UNLINK_PATRIMONY", entityType = "BOOK_COPY",
+            entityId = copyId.toString(), details = "schoolCodeUnlinked=true"
+        ))
     }
 }
