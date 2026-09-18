@@ -21,12 +21,21 @@ class CirculationRepository(
     private val loans = db.loanDao()
     private val system = db.systemDao()
 
-    suspend fun checkout(personId: Long, copyId: Long, period: LoanPeriod, now: Instant = Instant.now()): Long = db.withTransaction {
+    suspend fun checkout(
+        personId: Long,
+        copyId: Long,
+        period: LoanPeriod,
+        now: Instant = Instant.now(),
+        teacherConfirmedException: Boolean = false
+    ): Long = db.withTransaction {
         val person = requireNotNull(people.personById(personId)) { "Pessoa não encontrada" }
         val copy = requireNotNull(catalog.copyById(copyId)) { "Exemplar não encontrado" }
         require(LoanPolicy.canLoan(person.active, copy.status)) { "Empréstimo não permitido" }
         require(loans.activeLoanByCopy(copyId) == null) { "Exemplar já possui empréstimo ativo" }
-
+        val overdue = loans.overdueForPerson(personId, now.toEpochMilli())
+        require(LoanPolicy.canCheckoutWithOverdue(overdue.size, teacherConfirmedException)) {
+            "Há ${overdue.size} devolução(ões) em atraso. Confirme explicitamente a exceção para continuar."
+        }
         val due = LoanTimeline.dueAt(now, period, zoneId)
         val loanId = loans.insertLoan(
             LoanEntity(
@@ -40,13 +49,18 @@ class CirculationRepository(
         catalog.setCopyStatus(copyId, CopyStatus.LOANED)
         system.insertAudit(
             AuditLogEntity(
-                timestamp = now.toEpochMilli(),
-                action = "CHECKOUT",
-                entityType = "LOAN",
-                entityId = loanId.toString(),
+                timestamp = now.toEpochMilli(), action = "CHECKOUT", entityType = "LOAN", entityId = loanId.toString(),
                 details = "period=${period.days};copy=$copyId;person=$personId"
             )
         )
+        if (overdue.isNotEmpty()) {
+            system.insertAudit(
+                AuditLogEntity(
+                    timestamp = now.toEpochMilli(), action = "OVERDUE_OVERRIDE", entityType = "LOAN", entityId = loanId.toString(),
+                    details = "person=$personId;overdueCount=${overdue.size};teacherConfirmed=true"
+                )
+            )
+        }
         loanId
     }
 
@@ -57,10 +71,7 @@ class CirculationRepository(
         catalog.setCopyStatus(copyId, returnStatus)
         system.insertAudit(
             AuditLogEntity(
-                timestamp = now.toEpochMilli(),
-                action = "RETURN",
-                entityType = "LOAN",
-                entityId = active.id.toString(),
+                timestamp = now.toEpochMilli(), action = "RETURN", entityType = "LOAN", entityId = active.id.toString(),
                 details = "copy=$copyId;status=${returnStatus.name}"
             )
         )
@@ -82,10 +93,7 @@ class CirculationRepository(
         loans.updateDueDate(loanId, newDue.toEpochMilli(), period.days.toInt())
         system.insertAudit(
             AuditLogEntity(
-                timestamp = now.toEpochMilli(),
-                action = "RENEW",
-                entityType = "LOAN",
-                entityId = loanId.toString(),
+                timestamp = now.toEpochMilli(), action = "RENEW", entityType = "LOAN", entityId = loanId.toString(),
                 details = "period=${period.days};renewal=$renewalId"
             )
         )
