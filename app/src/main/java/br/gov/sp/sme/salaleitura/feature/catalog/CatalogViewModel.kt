@@ -9,6 +9,7 @@ import br.gov.sp.sme.salaleitura.data.local.AppDatabase
 import br.gov.sp.sme.salaleitura.data.local.entity.BookEditionEntity
 import br.gov.sp.sme.salaleitura.data.remote.BookMetadata
 import br.gov.sp.sme.salaleitura.data.repository.CatalogRepository
+import br.gov.sp.sme.salaleitura.data.repository.CopyIdentityRepository
 import br.gov.sp.sme.salaleitura.data.repository.MetadataRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -17,16 +18,51 @@ data class BookFormState(
     val isbn: String = "", val title: String = "", val subtitle: String = "", val authors: String = "", val publisher: String = "",
     val publicationYear: String = "", val language: String = "pt-BR", val pageCount: String = "", val subjects: String = "", val series: String = "",
     val cdd: String = "", val cdu: String = "", val location: String = "", val quantity: String = "1", val error: String? = null,
-    val loadingMetadata: Boolean = false, val saved: Boolean = false, val existingEditionId: Long? = null
+    val loadingMetadata: Boolean = false, val saved: Boolean = false, val existingEditionId: Long? = null,
+    val metadataSource: String? = null, val saving: Boolean = false
 )
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class CatalogViewModel(application: Application) : AndroidViewModel(application) {
     private val db = AppDatabase.get(application)
     private val catalogRepo = CatalogRepository(db)
+    private val identity = CopyIdentityRepository(db)
     private val metadataRepo = MetadataRepository(db)
     val editions = db.catalogDao().observeEditions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _selectedEdition = MutableStateFlow<Long?>(null)
+    val selectedEdition: StateFlow<Long?> = _selectedEdition.asStateFlow()
+    val selectedCopies = _selectedEdition.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else db.catalogDao().observeCopies(id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val selectedAliases = _selectedEdition.flatMapLatest { id ->
+        if (id == null) flowOf(emptyList()) else db.aliasDao().observeForEdition(id)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _catalogMessage = MutableStateFlow<String?>(null)
+    val catalogMessage: StateFlow<String?> = _catalogMessage.asStateFlow()
     private val _form = MutableStateFlow(BookFormState())
     val form: StateFlow<BookFormState> = _form.asStateFlow()
+    private var lookupRevision = 0
+
+    fun selectEdition(id: Long) { _selectedEdition.value = if (_selectedEdition.value == id) null else id; _catalogMessage.value = null }
+    fun findCopy(code: String) = viewModelScope.launch {
+        val clean = code.trim().removePrefix("SL:")
+        val copy = db.catalogDao().copyByCode(clean)
+        if (copy == null) _catalogMessage.value = "Exemplar ou patrimônio não encontrado: $clean"
+        else {
+            _selectedEdition.value = copy.editionId
+            _catalogMessage.value = "Exemplar encontrado: ${copy.internalCode}"
+        }
+    }
+    fun bindPatrimony(copyId: Long, code: String) = viewModelScope.launch {
+        runCatching { identity.bindPatrimony(copyId, code) }
+            .onSuccess { _catalogMessage.value = "Patrimônio $it vinculado ao exemplar" }
+            .onFailure { _catalogMessage.value = it.message ?: "Não foi possível vincular o patrimônio" }
+    }
+    fun removePatrimony(copyId: Long) = viewModelScope.launch {
+        runCatching { identity.unlinkPatrimony(copyId) }
+            .onSuccess { _catalogMessage.value = "Código patrimonial desvinculado; identificação interna preservada" }
+            .onFailure { _catalogMessage.value = it.message ?: "Não foi possível desvincular" }
+    }
 
     fun update(transform: (BookFormState) -> BookFormState) { _form.value = transform(_form.value).copy(error = null) }
 
@@ -34,32 +70,43 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         val current = _form.value
         val valid = Isbn.normalize(current.isbn)
         if (valid !is IsbnResult.Valid) { _form.value = current.copy(error = (valid as IsbnResult.Invalid).reason); return }
+        val revision = ++lookupRevision
         viewModelScope.launch {
-            _form.value = _form.value.copy(loadingMetadata = true)
+            _form.value = _form.value.copy(loadingMetadata = true, error = null, metadataSource = null)
             val local = db.catalogDao().editionByIsbn13(valid.isbn13)
+            if (revision != lookupRevision) return@launch
             if (local != null) {
                 _form.value = _form.value.copy(
                     isbn = valid.isbn13, title = local.title, subtitle = local.subtitle.orEmpty(), authors = local.authors,
                     publisher = local.publisher.orEmpty(), publicationYear = local.publicationYear?.toString().orEmpty(),
                     language = local.language.orEmpty().ifBlank { "pt-BR" }, pageCount = local.pageCount?.toString().orEmpty(),
                     subjects = local.subjects.orEmpty(), series = local.series.orEmpty(), cdd = local.cdd.orEmpty(), cdu = local.cdu.orEmpty(),
-                    existingEditionId = local.id, loadingMetadata = false, error = null
+                    existingEditionId = local.id, loadingMetadata = false, error = null, metadataSource = "ACERVO LOCAL"
                 )
                 return@launch
             }
-            val metadata = metadataRepo.lookup(valid.isbn13)
-            _form.value = if (metadata == null) _form.value.copy(loadingMetadata = false, error = "Metadados não encontrados; preencha manualmente", existingEditionId = null)
-            else applyMetadata(_form.value, metadata).copy(loadingMetadata = false, isbn = valid.isbn13, existingEditionId = null)
+            val bibliographic = runCatching { metadataRepo.lookup(valid.isbn13) }.getOrNull()
+            if (revision != lookupRevision) return@launch
+            _form.value = if (bibliographic == null) _form.value.copy(
+                isbn = valid.isbn13, loadingMetadata = false,
+                error = "Não foi possível obter dados bibliográficos deste ISBN. Confira sua conexão ou preencha manualmente; nenhum título foi inventado.",
+                existingEditionId = null
+            ) else applyMetadata(_form.value, bibliographic).copy(
+                loadingMetadata = false, isbn = valid.isbn13, existingEditionId = null,
+                metadataSource = bibliographic.source, error = null
+            )
         }
     }
 
     fun save() {
-        val s = _form.value; val q = s.quantity.toIntOrNull() ?: 0
+        val s = _form.value; if (s.saving) return
+        val q = s.quantity.toIntOrNull() ?: 0
         if (s.title.isBlank()) { _form.value = s.copy(error = "Informe o título"); return }
         if (q !in 1..999) { _form.value = s.copy(error = "Quantidade deve estar entre 1 e 999"); return }
         val isbnResult = s.isbn.takeIf(String::isNotBlank)?.let(Isbn::normalize)
         if (isbnResult is IsbnResult.Invalid) { _form.value = s.copy(error = isbnResult.reason); return }
         val valid = isbnResult as? IsbnResult.Valid
+        _form.value = s.copy(saving = true)
         viewModelScope.launch {
             runCatching {
                 val existing = s.existingEditionId ?: valid?.isbn13?.let { db.catalogDao().editionByIsbn13(it)?.id }
@@ -74,8 +121,8 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                         series = s.series.trim().ifBlank { null }, cdd = s.cdd.trim().ifBlank { null }, cdu = s.cdu.trim().ifBlank { null }, createdAt = System.currentTimeMillis()
                     ), q, s.location.trim().ifBlank { null }, System.currentTimeMillis()
                 )
-            }.onSuccess { _form.value = _form.value.copy(saved = true) }
-             .onFailure { _form.value = _form.value.copy(error = it.message ?: "Falha ao salvar") }
+            }.onSuccess { _form.value = _form.value.copy(saved = true, saving = false) }
+             .onFailure { _form.value = _form.value.copy(saving = false, error = it.message ?: "Falha ao salvar") }
         }
     }
 
