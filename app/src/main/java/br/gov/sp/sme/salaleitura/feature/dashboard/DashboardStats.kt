@@ -1,6 +1,9 @@
 package br.gov.sp.sme.salaleitura.feature.dashboard
 
 data class DashboardStats(
+    val schoolName: String = "",
+    val readingRoomName: String = "Sala de Leitura",
+    val dueToday: Int = 0,
     val editions: Int = 0,
     val copies: Int = 0,
     val available: Int = 0,
