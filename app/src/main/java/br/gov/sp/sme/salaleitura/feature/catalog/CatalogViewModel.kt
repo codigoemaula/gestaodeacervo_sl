@@ -65,9 +65,20 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
             .onFailure { _catalogMessage.value = it.message ?: "Não foi possível desvincular" }
     }
 
-    fun update(transform: (BookFormState) -> BookFormState) { _form.value = transform(_form.value).copy(error = null) }
+    fun update(transform: (BookFormState) -> BookFormState) {
+        val old = _form.value
+        val updated = transform(old)
+        _form.value = if (old.isbn != updated.isbn) {
+            ++lookupRevision
+            // Never leave another edition's title/author on screen after changing ISBN by hand.
+            BookFormState(isbn = updated.isbn, location = updated.location, quantity = updated.quantity)
+        } else updated.copy(error = null)
+    }
 
-    fun lookupMetadata() {
+    /** Explicit button bypasses cache, while camera uses fresh cached data whenever possible. */
+    fun lookupMetadata() { lookupMetadata(forceRefresh = true) }
+
+    private fun lookupMetadata(forceRefresh: Boolean) {
         val current = _form.value
         val valid = Isbn.normalize(current.isbn)
         if (valid !is IsbnResult.Valid) { _form.value = current.copy(error = (valid as IsbnResult.Invalid).reason); return }
@@ -86,7 +97,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 )
                 return@launch
             }
-            val result = runCatching { metadataRepo.lookupDetailed(valid.isbn13) }.getOrElse {
+            val result = runCatching { metadataRepo.lookupDetailed(valid.isbn13, forceRefresh = forceRefresh) }.getOrElse {
                 MetadataLookupResult.Unavailable(listOf("consulta bibliográfica"), emptyList())
             }
             if (revision != lookupRevision) return@launch
@@ -97,7 +108,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
                 )
                 is MetadataLookupResult.Missing -> _form.value.copy(
                     isbn = valid.isbn13, loadingMetadata = false, existingEditionId = null,
-                    error = "As fontes consultadas (${result.searchedSources.joinToString()}) não localizaram este ISBN. Ele pode constar em outros catálogos; preencha manualmente ou tente outro registro da edição."
+                    error = "As fontes consultadas (${result.searchedSources.joinToString()}) não localizaram este ISBN. Ele pode constar em outros catálogos; confira a edição ou preencha manualmente."
                 )
                 is MetadataLookupResult.Unavailable -> _form.value.copy(
                     isbn = valid.isbn13, loadingMetadata = false, existingEditionId = null,
@@ -140,7 +151,7 @@ class CatalogViewModel(application: Application) : AndroidViewModel(application)
         _form.value = if (previous.isbn == value) previous.copy(error = null) else BookFormState(
             isbn = value, location = previous.location, quantity = previous.quantity
         )
-        lookupMetadata()
+        lookupMetadata(forceRefresh = false)
     }
 
     private fun applyMetadata(s: BookFormState, m: BookMetadata) = s.copy(
