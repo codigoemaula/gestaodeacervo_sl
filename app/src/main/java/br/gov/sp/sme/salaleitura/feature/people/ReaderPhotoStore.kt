@@ -14,7 +14,7 @@ class ReaderPhotoStore(private val context: Context) {
     private val folder get() = File(context.filesDir, "reader_photos").apply { mkdirs() }
 
     fun photoFile(name: String?): File? {
-        if (name == null || !Regex("[0-9a-f-]{36}\\.jpg").matches(name)) return null
+        if (name == null || !Regex("[0-9a-f-]{36}\.jpg").matches(name)) return null
         return File(folder, name)
     }
 
@@ -44,5 +44,5 @@ class ReaderPhotoStore(private val context: Context) {
     }
 
     fun remove(name: String?) { photoFile(name)?.delete() }
-    fun read(name: String?): Bitmap? = photoFile(name)?.takeIf(File::isFile)?.let(BitmapFactory::decodeFile)
+    fun read(name: String?): Bitmap? = photoFile(name)?.takeIf(File::isFile)?.let { BitmapFactory.decodeFile(it.absolutePath) }
 }
