@@ -11,7 +11,7 @@ class LegalInfoContentTest {
         assertTrue(text.contains("ISBN"))
         assertTrue(text.contains("dispositivo"))
         assertTrue(text.contains("endereço IP"))
-        assertTrue(text.contains("exportação"))
+        assertTrue(text.contains("Exportações"))
         assertTrue(text.contains("foto"))
         assertFalse(text.contains("isento da LGPD", ignoreCase = true))
     }
