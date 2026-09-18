@@ -31,18 +31,8 @@ data class ClassGroupEntity(
 
 @Entity(
     tableName = "people",
-    foreignKeys = [ForeignKey(
-        entity = ClassGroupEntity::class,
-        parentColumns = ["id"],
-        childColumns = ["classGroupId"],
-        onDelete = ForeignKey.SET_NULL
-    )],
-    indices = [
-        Index(value = ["internalCode"], unique = true),
-        Index(value = ["institutionalId"]),
-        Index(value = ["classGroupId"]),
-        Index(value = ["name"])
-    ]
+    foreignKeys = [ForeignKey(entity = ClassGroupEntity::class, parentColumns = ["id"], childColumns = ["classGroupId"], onDelete = ForeignKey.SET_NULL)],
+    indices = [Index(value = ["internalCode"], unique = true), Index(value = ["institutionalId"]), Index(value = ["classGroupId"]), Index(value = ["name"])]
 )
 data class PersonEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -54,13 +44,12 @@ data class PersonEntity(
     val grade: String? = null,
     val shift: Shift? = null,
     val role: String? = null,
-    val active: Boolean = true
+    val active: Boolean = true,
+    /** Random file basename in private filesDir/reader_photos. Never a public URI. */
+    val photoFilename: String? = null
 )
 
-@Entity(
-    tableName = "book_editions",
-    indices = [Index(value = ["isbn10"], unique = true), Index(value = ["isbn13"], unique = true), Index(value = ["title"])]
-)
+@Entity(tableName = "book_editions", indices = [Index(value = ["isbn10"], unique = true), Index(value = ["isbn13"], unique = true), Index(value = ["title"])])
 data class BookEditionEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val isbn10: String? = null,
@@ -82,16 +71,7 @@ data class BookEditionEntity(
     val createdAt: Long
 )
 
-@Entity(
-    tableName = "book_copies",
-    foreignKeys = [ForeignKey(
-        entity = BookEditionEntity::class,
-        parentColumns = ["id"],
-        childColumns = ["editionId"],
-        onDelete = ForeignKey.RESTRICT
-    )],
-    indices = [Index(value = ["internalCode"], unique = true), Index(value = ["editionId"]), Index(value = ["status"])]
-)
+@Entity(tableName = "book_copies", foreignKeys = [ForeignKey(entity = BookEditionEntity::class, parentColumns = ["id"], childColumns = ["editionId"], onDelete = ForeignKey.RESTRICT)], indices = [Index(value = ["internalCode"], unique = true), Index(value = ["editionId"]), Index(value = ["status"])])
 data class BookCopyEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val internalCode: String,
@@ -103,14 +83,10 @@ data class BookCopyEntity(
     val notes: String? = null
 )
 
-@Entity(
-    tableName = "loans",
-    foreignKeys = [
-        ForeignKey(entity = PersonEntity::class, parentColumns = ["id"], childColumns = ["personId"], onDelete = ForeignKey.RESTRICT),
-        ForeignKey(entity = BookCopyEntity::class, parentColumns = ["id"], childColumns = ["copyId"], onDelete = ForeignKey.RESTRICT)
-    ],
-    indices = [Index(value = ["personId"]), Index(value = ["copyId"]), Index(value = ["returnedAt"]), Index(value = ["dueAt"])]
-)
+@Entity(tableName = "loans", foreignKeys = [
+    ForeignKey(entity = PersonEntity::class, parentColumns = ["id"], childColumns = ["personId"], onDelete = ForeignKey.RESTRICT),
+    ForeignKey(entity = BookCopyEntity::class, parentColumns = ["id"], childColumns = ["copyId"], onDelete = ForeignKey.RESTRICT)
+], indices = [Index(value = ["personId"]), Index(value = ["copyId"]), Index(value = ["returnedAt"]), Index(value = ["dueAt"])])
 data class LoanEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val personId: Long,
@@ -122,11 +98,7 @@ data class LoanEntity(
     val returnStatus: CopyStatus? = null
 )
 
-@Entity(
-    tableName = "loan_renewals",
-    foreignKeys = [ForeignKey(entity = LoanEntity::class, parentColumns = ["id"], childColumns = ["loanId"], onDelete = ForeignKey.CASCADE)],
-    indices = [Index(value = ["loanId"])]
-)
+@Entity(tableName = "loan_renewals", foreignKeys = [ForeignKey(entity = LoanEntity::class, parentColumns = ["id"], childColumns = ["loanId"], onDelete = ForeignKey.CASCADE)], indices = [Index(value = ["loanId"])])
 data class LoanRenewalEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val loanId: Long,
@@ -144,14 +116,10 @@ data class InventorySessionEntity(
     val notes: String? = null
 )
 
-@Entity(
-    tableName = "inventory_items",
-    foreignKeys = [
-        ForeignKey(entity = InventorySessionEntity::class, parentColumns = ["id"], childColumns = ["sessionId"], onDelete = ForeignKey.CASCADE),
-        ForeignKey(entity = BookCopyEntity::class, parentColumns = ["id"], childColumns = ["copyId"], onDelete = ForeignKey.RESTRICT)
-    ],
-    indices = [Index(value = ["sessionId", "copyId"], unique = true), Index(value = ["copyId"])]
-)
+@Entity(tableName = "inventory_items", foreignKeys = [
+    ForeignKey(entity = InventorySessionEntity::class, parentColumns = ["id"], childColumns = ["sessionId"], onDelete = ForeignKey.CASCADE),
+    ForeignKey(entity = BookCopyEntity::class, parentColumns = ["id"], childColumns = ["copyId"], onDelete = ForeignKey.RESTRICT)
+], indices = [Index(value = ["sessionId", "copyId"], unique = true), Index(value = ["copyId"])])
 data class InventoryItemEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val sessionId: Long,
@@ -160,44 +128,16 @@ data class InventoryItemEntity(
 )
 
 @Entity(tableName = "metadata_cache")
-data class MetadataCacheEntity(
-    @PrimaryKey val isbn13: String,
-    val source: String,
-    val payloadJson: String,
-    val fetchedAt: Long
-)
+data class MetadataCacheEntity(@PrimaryKey val isbn13: String, val source: String, val payloadJson: String, val fetchedAt: Long)
 
 @Entity(tableName = "isbn_range_data")
-data class IsbnRangeDataEntity(
-    @PrimaryKey val id: Int = 1,
-    val version: String,
-    val payload: String,
-    val updatedAt: Long
-)
+data class IsbnRangeDataEntity(@PrimaryKey val id: Int = 1, val version: String, val payload: String, val updatedAt: Long)
 
 @Entity(tableName = "sync_status")
-data class SyncStatusEntity(
-    @PrimaryKey val key: String,
-    val lastAttemptAt: Long? = null,
-    val lastSuccessAt: Long? = null,
-    val status: String,
-    val message: String? = null
-)
+data class SyncStatusEntity(@PrimaryKey val key: String, val lastAttemptAt: Long? = null, val lastSuccessAt: Long? = null, val status: String, val message: String? = null)
 
 @Entity(tableName = "audit_log", indices = [Index(value = ["timestamp"]), Index(value = ["entityType", "entityId"])])
-data class AuditLogEntity(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val timestamp: Long,
-    val action: String,
-    val entityType: String,
-    val entityId: String,
-    val details: String? = null
-)
+data class AuditLogEntity(@PrimaryKey(autoGenerate = true) val id: Long = 0, val timestamp: Long, val action: String, val entityType: String, val entityId: String, val details: String? = null)
 
 @Entity(tableName = "app_settings")
-data class AppSettingsEntity(
-    @PrimaryKey val id: Int = 1,
-    val lastMetadataSyncAt: Long? = null,
-    val lastIsbnRangeSyncAt: Long? = null,
-    val backupSchemaVersion: Int = 1
-)
+data class AppSettingsEntity(@PrimaryKey val id: Int = 1, val lastMetadataSyncAt: Long? = null, val lastIsbnRangeSyncAt: Long? = null, val backupSchemaVersion: Int = 1)
