@@ -19,10 +19,10 @@ Ana Silva,ESTUDANTE,123,7A,2026,MATUTINO,
         assertTrue(CsvImporter.parse("nome,tipo\nSem Tipo,").errors.isNotEmpty())
     }
 
-    @Test fun scannerRoutesIsbnCopyAndPersonWithoutNetwork() {
+    @Test fun scannerRoutesIsbnAndCopiesButNeverPeople() {
         assertTrue(ScanRouter.route("9780306406157") is ScanResult.Isbn)
         assertEquals(ScanResult.Copy("SL-000123-001"), ScanRouter.route("SL:SL-000123-001"))
-        assertEquals(ScanResult.Person("P-ABCD1234"), ScanRouter.route("PERSON:P-ABCD1234"))
+        assertTrue(ScanRouter.route("PERSON:P-ABCD1234") is ScanResult.Unknown)
     }
 
     @Test fun backupManifestRoundTripsAndChecksumIsSha256() {
