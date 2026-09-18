@@ -14,7 +14,7 @@ class ReaderPhotoStore(private val context: Context) {
     private val folder get() = File(context.filesDir, "reader_photos").apply { mkdirs() }
 
     fun photoFile(name: String?): File? {
-        if (name == null || !Regex("[0-9a-f-]{36}\.jpg").matches(name)) return null
+        if (name == null || !Regex("[0-9a-f-]{36}[.]jpg").matches(name)) return null
         return File(folder, name)
     }
 
@@ -22,8 +22,9 @@ class ReaderPhotoStore(private val context: Context) {
         val type = context.contentResolver.getType(uri)
         require(type == null || type.startsWith("image/")) { "Selecione um arquivo de imagem" }
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-            ?: error("Não foi possível abrir a imagem")
+        requireNotNull(context.contentResolver.openInputStream(uri)) { "Não foi possível abrir a imagem" }.use {
+            BitmapFactory.decodeStream(it, null, bounds)
+        }
         require(bounds.outWidth in 1..12000 && bounds.outHeight in 1..12000) { "Imagem inválida ou excessivamente grande" }
         var sample = 1
         while (bounds.outWidth / sample > 512 || bounds.outHeight / sample > 512) sample *= 2
