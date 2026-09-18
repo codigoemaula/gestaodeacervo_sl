@@ -7,6 +7,7 @@ import br.gov.sp.sme.salaleitura.core.logic.LoanPeriodSelector
 import br.gov.sp.sme.salaleitura.core.model.CopyStatus
 import br.gov.sp.sme.salaleitura.core.model.LoanPeriod
 import br.gov.sp.sme.salaleitura.data.local.AppDatabase
+import br.gov.sp.sme.salaleitura.data.local.dao.ActiveLoanRow
 import br.gov.sp.sme.salaleitura.data.local.entity.BookCopyEntity
 import br.gov.sp.sme.salaleitura.data.local.entity.PersonEntity
 import br.gov.sp.sme.salaleitura.data.repository.CirculationRepository
@@ -15,7 +16,8 @@ import kotlinx.coroutines.launch
 
 data class CheckoutUiState(
     val personCode: String = "", val copyCode: String = "", val person: PersonEntity? = null, val copy: BookCopyEntity? = null,
-    val period: LoanPeriod = LoanPeriod.SEVEN, val message: String? = null, val error: String? = null
+    val period: LoanPeriod = LoanPeriod.SEVEN, val message: String? = null, val error: String? = null,
+    val overdue: List<ActiveLoanRow> = emptyList(), val teacherConfirmedException: Boolean = false
 )
 
 data class ReturnUiState(val copyCode: String = "", val copy: BookCopyEntity? = null, val loanId: Long? = null, val person: PersonEntity? = null, val message: String? = null, val error: String? = null)
@@ -28,21 +30,32 @@ class CirculationViewModel(application: Application) : AndroidViewModel(applicat
 
     init { viewModelScope.launch { db.schoolDao().get()?.let { _checkout.value = _checkout.value.copy(period = LoanPeriodSelector.fromDefaultDays(it.defaultLoanDays)) } } }
 
-    fun setPersonCode(value: String) { _checkout.value = _checkout.value.copy(personCode = value, person = null, error = null, message = null) }
-    fun setCopyCode(value: String) { _checkout.value = _checkout.value.copy(copyCode = value, copy = null, error = null, message = null) }
+    fun setPersonCode(value: String) {
+        _checkout.value = _checkout.value.copy(personCode = value, person = null, overdue = emptyList(), teacherConfirmedException = false, error = null, message = null)
+    }
+    fun setCopyCode(value: String) {
+        _checkout.value = _checkout.value.copy(copyCode = value, copy = null, teacherConfirmedException = false, error = null, message = null)
+    }
     fun selectPeriod(value: LoanPeriod) { _checkout.value = _checkout.value.copy(period = value) }
+    fun confirmOverdueException(value: Boolean) { _checkout.value = _checkout.value.copy(teacherConfirmedException = value) }
+    fun changeReader() { _checkout.value = CheckoutUiState(period = _checkout.value.period) }
 
     fun resolveCheckout() = viewModelScope.launch {
         val s = _checkout.value
         val person = db.peopleDao().personByCode(s.personCode.trim())
-        val copy = db.catalogDao().copyByCode(s.copyCode.trim())
-        _checkout.value = s.copy(person = person, copy = copy, error = when { person == null -> "Pessoa não encontrada"; copy == null -> "Exemplar não encontrado"; else -> null })
+        val copy = s.copyCode.trim().takeIf(String::isNotEmpty)?.let { db.catalogDao().copyByCode(it) }
+        val overdue = person?.let { db.loanDao().overdueForPerson(it.id, System.currentTimeMillis()) }.orEmpty()
+        _checkout.value = s.copy(person = person, copy = copy, overdue = overdue, teacherConfirmedException = false,
+            error = when { person == null -> "Pessoa não encontrada"; copy == null -> "Exemplar não encontrado"; else -> null })
     }
 
     fun checkout() = viewModelScope.launch {
         val s = _checkout.value; val person = s.person ?: return@launch; val copy = s.copy ?: return@launch
-        runCatching { repo.checkout(person.id, copy.id, s.period) }
-            .onSuccess { _checkout.value = CheckoutUiState(period = s.period, message = "Empréstimo registrado") }
+        runCatching { repo.checkout(person.id, copy.id, s.period, teacherConfirmedException = s.teacherConfirmedException) }
+            .onSuccess {
+                _checkout.value = s.copy(copyCode = "", copy = null, teacherConfirmedException = false,
+                    message = "Empréstimo confirmado: ${copy.internalCode}. Escaneie o próximo exemplar ou troque de leitor.", error = null)
+            }
             .onFailure { _checkout.value = s.copy(error = it.message ?: "Falha no empréstimo") }
     }
 
@@ -59,7 +72,7 @@ class CirculationViewModel(application: Application) : AndroidViewModel(applicat
     fun returnCopy(status: CopyStatus) = viewModelScope.launch {
         val s = _return.value; val copy = s.copy ?: return@launch
         runCatching { repo.returnCopy(copy.id, status) }
-            .onSuccess { _return.value = ReturnUiState(message = "Devolução registrada") }
+            .onSuccess { _return.value = ReturnUiState(message = "Devolução registrada: ${copy.internalCode}. Escaneie o próximo exemplar.") }
             .onFailure { _return.value = s.copy(error = it.message ?: "Falha na devolução") }
     }
 
