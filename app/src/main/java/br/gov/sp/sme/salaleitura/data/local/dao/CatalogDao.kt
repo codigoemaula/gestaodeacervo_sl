@@ -18,6 +18,7 @@ interface CatalogDao {
     @Query("SELECT * FROM book_copies WHERE internalCode=:code COLLATE NOCASE OR id=(SELECT copyId FROM copy_aliases WHERE normalizedCode=UPPER(TRIM(:code)) LIMIT 1) LIMIT 1") suspend fun copyByCode(code: String): BookCopyEntity?
     @Query("SELECT * FROM book_editions ORDER BY title COLLATE NOCASE") fun observeEditions(): Flow<List<BookEditionEntity>>
     @Query("SELECT * FROM book_copies WHERE editionId=:editionId ORDER BY sequence") fun observeCopies(editionId: Long): Flow<List<BookCopyEntity>>
+    @Query("SELECT * FROM book_copies WHERE editionId=:editionId ORDER BY sequence") suspend fun copiesByEdition(editionId: Long): List<BookCopyEntity>
     @Query("SELECT * FROM book_copies ORDER BY id") suspend fun allCopies(): List<BookCopyEntity>
     @Query("SELECT COUNT(*) FROM book_editions") suspend fun editionCount(): Int
     @Query("SELECT COUNT(*) FROM book_copies") suspend fun copyCount(): Int
