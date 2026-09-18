@@ -89,9 +89,11 @@ class CirculationViewModel(application: Application) : AndroidViewModel(applicat
                 error = "Obra sem exemplares físicos cadastrados", message = null)
             IsbnCopyDecision.NoneAvailable -> s.copy(copy = null, candidateCopies = emptyList(), candidateTitle = title,
                 error = "Nenhum exemplar de '$title' está disponível para empréstimo", message = null)
-            is IsbnCopyDecision.Single -> s.copy(copyCode = decision.copy.internalCode, copy = null,
-                candidateCopies = emptyList(), candidateTitle = null, error = null, message = null).also {
-                resolveCheckoutCode(it.copyCode)
+            is IsbnCopyDecision.Single -> {
+                val overdue = s.person?.let { db.loanDao().overdueForPerson(it.id, System.currentTimeMillis()) }.orEmpty()
+                s.copy(copyCode = decision.copy.internalCode, copy = decision.copy, overdue = overdue,
+                    candidateCopies = emptyList(), candidateTitle = null, teacherConfirmedException = false,
+                    error = null, message = null)
             }
             is IsbnCopyDecision.ChooseCopy -> s.copy(copy = null, copyCode = "", candidateCopies = decision.available,
                 candidateTitle = title, error = null, message = "Escolha o exemplar físico de '$title' que será entregue.")
