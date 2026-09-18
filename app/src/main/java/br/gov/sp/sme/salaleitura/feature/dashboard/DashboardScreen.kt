@@ -2,6 +2,7 @@
 
 package br.gov.sp.sme.salaleitura.feature.dashboard
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,10 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import br.gov.sp.sme.salaleitura.R
 import br.gov.sp.sme.salaleitura.ui.theme.ReadingRoomColors
 import java.text.DateFormat
 import java.util.Date
@@ -32,21 +35,23 @@ import java.util.Date
 fun DashboardScreen(onNavigate: (String) -> Unit, vm: DashboardViewModel = viewModel()) {
     val stats by vm.state.collectAsStateWithLifecycle()
     Scaffold(topBar = {
-        TopAppBar(title = { Text("Sala de Leitura", style = MaterialTheme.typography.titleMedium) },
-            actions = { TextButton(onClick = { onNavigate("more") }) { Text("Gestão") } })
+        TopAppBar(title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                Image(painterResource(R.drawable.ic_sala_leitura), contentDescription = "Identidade visual da Sala de Leitura", modifier = Modifier.size(43.dp))
+                Text("Sala de Leitura", style = MaterialTheme.typography.titleMedium)
+            }
+        }, actions = { TextButton(onClick = { onNavigate("more") }) { Text("Gestão") } })
     }) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(18.dp)
-        ) {
+            verticalArrangement = Arrangement.spacedBy(18.dp)) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("REDE MUNICIPAL DE SÃO PAULO", style = MaterialTheme.typography.labelSmall,
+                    Text("LEITURA · ACERVO · MEDIAÇÃO", style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.secondary)
                     Text(stats.readingRoomName, style = MaterialTheme.typography.headlineLarge)
-                    Text(stats.schoolName.ifBlank { "Unidade educacional" },
-                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stats.schoolName.ifBlank { "Unidade educacional" }, style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             item {
@@ -58,10 +63,10 @@ fun DashboardScreen(onNavigate: (String) -> Unit, vm: DashboardViewModel = viewM
                             Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(58.dp), tint = ReadingRoomColors.Ivory)
                             Column(Modifier.weight(1f)) {
                                 Text("Escanear", style = MaterialTheme.typography.headlineMedium, color = Color.White)
-                                Text("A câmera é seu balcão de atendimento", style = MaterialTheme.typography.bodyMedium, color = ReadingRoomColors.Ivory)
+                                Text("Leitura de códigos de livros e exemplares", style = MaterialTheme.typography.bodyMedium, color = ReadingRoomColors.Ivory)
                             }
                         }
-                        Text("Cadastre, empreste, devolva ou confira exemplares usando códigos de barras e QR Codes.",
+                        Text("Use a câmera somente para ISBN, cadastro, devolução e inventário de exemplares. Leitores são selecionados pela turma e pelo nome.",
                             style = MaterialTheme.typography.bodyMedium, color = Color.White)
                         Surface(shape = RoundedCornerShape(14.dp), color = ReadingRoomColors.Ivory, modifier = Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
@@ -73,10 +78,10 @@ fun DashboardScreen(onNavigate: (String) -> Unit, vm: DashboardViewModel = viewM
                     }
                 }
             }
-            item { Text("Atendimento rápido", style = MaterialTheme.typography.titleLarge) }
+            item { Text("Circulação e organização", style = MaterialTheme.typography.titleLarge) }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    QuickAction("Emprestar", "Ler leitor e livro", Icons.Default.Book, Modifier.weight(1f)) { onNavigate("checkout/scan") }
+                    QuickAction("Emprestar", "Selecionar turma e estudante", Icons.Default.Book, Modifier.weight(1f)) { onNavigate("checkout/scan") }
                     QuickAction("Devolver", "Ler exemplar", Icons.Default.AssignmentReturn, Modifier.weight(1f)) { onNavigate("return/scan") }
                 }
             }
@@ -115,7 +120,7 @@ fun DashboardScreen(onNavigate: (String) -> Unit, vm: DashboardViewModel = viewM
                         }
                         TextButton(onClick = { onNavigate("people") }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Default.People, contentDescription = null)
-                            Spacer(Modifier.width(8.dp)); Text("Pessoas e turmas")
+                            Spacer(Modifier.width(8.dp)); Text("Salas e leitores")
                         }
                     }
                 }
