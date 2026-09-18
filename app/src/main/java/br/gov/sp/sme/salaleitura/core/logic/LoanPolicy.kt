@@ -9,4 +9,8 @@ object LoanPolicy {
 
     fun canLoan(personActive: Boolean, copyStatus: CopyStatus): Boolean =
         personActive && copyStatus == CopyStatus.AVAILABLE
+
+    /** Teachers may make a pedagogical exception, but must explicitly confirm it. */
+    fun canCheckoutWithOverdue(overdueCount: Int, teacherConfirmedException: Boolean): Boolean =
+        overdueCount <= 0 || teacherConfirmedException
 }
