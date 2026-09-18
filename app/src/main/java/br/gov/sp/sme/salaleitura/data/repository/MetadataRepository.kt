@@ -15,14 +15,28 @@ class MetadataRepository(
     private val ranges: IsbnRangeService = IsbnRangeService()
 ) {
     private val system = db.systemDao()
+    private val resolver = MetadataLookupEngine(listOf(
+        "Open Library (catálogo)" to primary,
+        "Open Library (edição ISBN)" to OpenLibraryIsbnService(),
+        "Google Books" to fallback,
+        "Open Library (busca ISBN)" to OpenLibrarySearchService()
+    ))
 
-    suspend fun lookup(isbn13: String, now: Long = System.currentTimeMillis()): BookMetadata? {
-        system.metadata(isbn13)?.let { return decode(it.payloadJson) }
-        val metadata = runCatching { primary.lookup(isbn13) }.getOrNull()
-            ?: runCatching { fallback.lookup(isbn13) }.getOrNull()
-            ?: return null
-        system.putMetadata(MetadataCacheEntity(isbn13, metadata.source, encode(metadata), now))
-        return metadata
+    suspend fun lookup(isbn13: String, now: Long = System.currentTimeMillis()): BookMetadata? =
+        when (val result = lookupDetailed(isbn13, now)) {
+            is MetadataLookupResult.Found -> result.book
+            else -> null
+        }
+
+    suspend fun lookupDetailed(isbn13: String, now: Long = System.currentTimeMillis()): MetadataLookupResult {
+        system.metadata(isbn13)?.let { cache ->
+            runCatching { decode(cache.payloadJson) }.getOrNull()?.let { return MetadataLookupResult.Found(it) }
+        }
+        val result = resolver.lookup(isbn13)
+        if (result is MetadataLookupResult.Found) {
+            system.putMetadata(MetadataCacheEntity(isbn13, result.book.source, encode(result.book), now))
+        }
+        return result
     }
 
     suspend fun refreshIsbnRanges(now: Long = System.currentTimeMillis()): Boolean {
