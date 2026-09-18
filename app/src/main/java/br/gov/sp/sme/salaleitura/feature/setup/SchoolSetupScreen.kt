@@ -18,10 +18,8 @@ fun SchoolSetupScreen(onFinished: () -> Unit, vm: SchoolSetupViewModel = viewMod
     LaunchedEffect(s.saved) { if (s.saved) onFinished() }
     Scaffold(topBar = { TopAppBar(title = { Text("Configurar Sala de Leitura") }) }) { padding ->
         Column(Modifier.padding(padding).padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Esta instalação representa uma unidade escolar. Os dados permanecem no dispositivo.", style = MaterialTheme.typography.bodyMedium)
+            Text("Configure sua unidade. Os cadastros e empréstimos permanecem neste dispositivo; somente consultas bibliográficas por ISBN usam a internet.", style = MaterialTheme.typography.bodyMedium)
             OutlinedTextField(s.name, { v -> vm.update { it.copy(name = v) } }, label = { Text("Nome da unidade") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(s.eolCode, { v -> vm.update { it.copy(eolCode = v) } }, label = { Text("Código EOL da escola") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(s.dre, { v -> vm.update { it.copy(dre = v) } }, label = { Text("DRE") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(s.schoolYear, { v -> vm.update { it.copy(schoolYear = v.filter(Char::isDigit)) } }, label = { Text("Ano letivo") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(s.readingRoomName, { v -> vm.update { it.copy(readingRoomName = v) } }, label = { Text("Identificação da Sala de Leitura") }, modifier = Modifier.fillMaxWidth())
             Text("Prazo padrão de empréstimo")
