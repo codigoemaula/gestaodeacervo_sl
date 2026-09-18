@@ -50,6 +50,8 @@ import br.gov.sp.sme.salaleitura.feature.dashboard.HomeRoutes
 import br.gov.sp.sme.salaleitura.feature.inventory.InventoryScreen
 import br.gov.sp.sme.salaleitura.feature.inventory.InventoryViewModel
 import br.gov.sp.sme.salaleitura.feature.labels.LabelsScreen
+import br.gov.sp.sme.salaleitura.feature.legal.AboutScreen
+import br.gov.sp.sme.salaleitura.feature.legal.TermsPrivacyScreen
 import br.gov.sp.sme.salaleitura.feature.people.ClassGroupScreen
 import br.gov.sp.sme.salaleitura.feature.people.CsvImportScreen
 import br.gov.sp.sme.salaleitura.feature.people.PeopleScreen
@@ -138,6 +140,8 @@ fun AppNav(hasSchool: Boolean) {
             composable("labels") { LabelsScreen(onBack = { nav.popBackStack() }) }
             composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
+            composable("terms-privacy") { TermsPrivacyScreen(onBack = { nav.popBackStack() }) }
+            composable("about") { AboutScreen(onBack = { nav.popBackStack() }) }
             composable("more") { MoreMenuScreen(onBack = { nav.popBackStack() }, onNavigate = nav::navigate) }
             composable(route = "scanner/{target}", arguments = listOf(navArgument("target") { type = NavType.StringType })) { entry ->
                 val target = entry.arguments?.getString("target").orEmpty()
@@ -218,6 +222,8 @@ private fun MoreMenuScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
             OutlinedButton(onClick = { onNavigate("labels") }, modifier = Modifier.fillMaxWidth()) { Text("Etiquetas de exemplares") }
             OutlinedButton(onClick = { onNavigate("backup") }, modifier = Modifier.fillMaxWidth()) { Text("Backup e restauração") }
             OutlinedButton(onClick = { onNavigate("settings") }, modifier = Modifier.fillMaxWidth()) { Text("Configurações e atualização ISBN") }
+            OutlinedButton(onClick = { onNavigate("terms-privacy") }, modifier = Modifier.fillMaxWidth()) { Text("Termos de uso e privacidade") }
+            OutlinedButton(onClick = { onNavigate("about") }, modifier = Modifier.fillMaxWidth()) { Text("Sobre · Código em Aula") }
         }
     }
 }
