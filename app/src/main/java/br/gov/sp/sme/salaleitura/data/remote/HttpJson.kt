@@ -1,6 +1,8 @@
 package br.gov.sp.sme.salaleitura.data.remote
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.net.HttpURLConnection
@@ -8,9 +10,27 @@ import java.net.URL
 
 internal class MetadataHttpException(val status: Int) : IOException("Serviço bibliográfico retornou HTTP $status")
 
-/** A 404 is a missing record. Offline, timeouts, 403 and 429 must NOT be reported as missing records. */
+/** The public Open Library API limits unidentified clients to one request per second. */
+private val openLibraryMutex = Mutex()
+private var nextOpenLibraryRequestMs = 0L
+
+private suspend fun awaitOpenLibrarySlot() {
+    openLibraryMutex.lock()
+    try {
+        val now = System.nanoTime() / 1_000_000L
+        val waitMs = (nextOpenLibraryRequestMs - now).coerceAtLeast(0L)
+        if (waitMs > 0) delay(waitMs)
+        nextOpenLibraryRequestMs = System.nanoTime() / 1_000_000L + 1100L
+    } finally {
+        openLibraryMutex.unlock()
+    }
+}
+
+/** Distinguishes a 404 (not found) from unavailable API, rate limits, and offline operation. */
 internal suspend fun httpGet(url: String, timeoutMs: Int = 8000): String? = withContext(Dispatchers.IO) {
-    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+    val target = URL(url)
+    if (target.host == "openlibrary.org") awaitOpenLibrarySlot()
+    val connection = (target.openConnection() as HttpURLConnection).apply {
         connectTimeout = timeoutMs
         readTimeout = timeoutMs
         requestMethod = "GET"
