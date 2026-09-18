@@ -19,6 +19,7 @@ class MetadataRepository(
         "Open Library (catálogo)" to primary,
         "Open Library (edição ISBN)" to OpenLibraryIsbnService(),
         "Google Books" to fallback,
+        "Crossref (livros)" to CrossrefBookService(),
         "Open Library (busca ISBN)" to OpenLibrarySearchService()
     ))
 
@@ -28,15 +29,27 @@ class MetadataRepository(
             else -> null
         }
 
-    suspend fun lookupDetailed(isbn13: String, now: Long = System.currentTimeMillis()): MetadataLookupResult {
-        system.metadata(isbn13)?.let { cache ->
-            runCatching { decode(cache.payloadJson) }.getOrNull()?.let { return MetadataLookupResult.Found(it) }
+    /** The user may explicitly refresh a record; offline failures never destroy valid cached data. */
+    suspend fun lookupDetailed(
+        isbn13: String,
+        now: Long = System.currentTimeMillis(),
+        forceRefresh: Boolean = false
+    ): MetadataLookupResult {
+        val entry = system.metadata(isbn13)
+        val cached = entry?.let { runCatching { decode(it.payloadJson) }.getOrNull() }
+            ?.takeIf { it.isbn13 == isbn13 && it.title.isNotBlank() }
+        val freshFor = if (cached != null && cached.authors.isNotEmpty() && !cached.publisher.isNullOrBlank())
+            14L * 24 * 60 * 60 * 1000 else 24L * 60 * 60 * 1000
+        if (!forceRefresh && cached != null && entry != null && now >= entry.fetchedAt && now - entry.fetchedAt <= freshFor) {
+            return MetadataLookupResult.Found(cached)
         }
         val result = resolver.lookup(isbn13)
         if (result is MetadataLookupResult.Found) {
             system.putMetadata(MetadataCacheEntity(isbn13, result.book.source, encode(result.book), now))
+            return result
         }
-        return result
+        // A transient network failure or catalog gap does not erase a bibliographic record already stored offline.
+        return cached?.let { MetadataLookupResult.Found(it.copy(source = "${it.source} (cache local)")) } ?: result
     }
 
     suspend fun refreshIsbnRanges(now: Long = System.currentTimeMillis()): Boolean {
@@ -60,12 +73,12 @@ class MetadataRepository(
 
     private fun decode(json: String): BookMetadata = JSONObject(json).let { o ->
         BookMetadata(
-            isbn13 = o.getString("isbn13"), title = o.getString("title"), subtitle = o.optString("subtitle").takeIf(String::isNotBlank),
+            isbn13 = o.getString("isbn13"), title = o.getString("title"), subtitle = o.optString("subtitle").takeIf { it.isNotBlank() && it != "null" },
             authors = o.optJSONArray("authors")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
-            publisher = o.optString("publisher").takeIf(String::isNotBlank), publicationYear = o.optInt("publicationYear", 0).takeIf { it > 0 },
-            language = o.optString("language").takeIf(String::isNotBlank), pageCount = o.optInt("pageCount", 0).takeIf { it > 0 },
+            publisher = o.optString("publisher").takeIf { it.isNotBlank() && it != "null" }, publicationYear = o.optInt("publicationYear", 0).takeIf { it > 0 },
+            language = o.optString("language").takeIf { it.isNotBlank() && it != "null" }, pageCount = o.optInt("pageCount", 0).takeIf { it > 0 },
             subjects = o.optJSONArray("subjects")?.let { a -> (0 until a.length()).map { a.getString(it) } }.orEmpty(),
-            coverUrl = o.optString("coverUrl").takeIf(String::isNotBlank), source = o.getString("source")
+            coverUrl = o.optString("coverUrl").takeIf { it.isNotBlank() && it != "null" }, source = o.getString("source")
         )
     }
 }
