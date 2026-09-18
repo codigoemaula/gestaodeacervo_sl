@@ -38,6 +38,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import br.gov.sp.sme.salaleitura.feature.backup.BackupScreen
 import br.gov.sp.sme.salaleitura.feature.catalog.BookFormScreen
+import br.gov.sp.sme.salaleitura.feature.catalog.BookScanRoute
 import br.gov.sp.sme.salaleitura.feature.catalog.CatalogScreen
 import br.gov.sp.sme.salaleitura.feature.catalog.CatalogViewModel
 import br.gov.sp.sme.salaleitura.feature.circulation.CheckoutScreen
@@ -95,9 +96,14 @@ fun AppNav(hasSchool: Boolean) {
             composable("catalog") {
                 CatalogScreen(onBack = { nav.popBackStack() }, onAdd = { nav.navigate("book/new") })
             }
-            composable("book/new") { entry ->
+            composable("book/new?isbn={isbn}", arguments = listOf(navArgument("isbn") {
+                type = NavType.StringType
+                defaultValue = ""
+            })) { entry ->
                 val vm: CatalogViewModel = viewModel(viewModelStoreOwner = entry)
                 ConsumeScan(entry, "scan_book") { vm.applyScannedIsbn(it) }
+                val entryIsbn = entry.arguments?.getString("isbn").orEmpty()
+                LaunchedEffect(entryIsbn) { if (entryIsbn.isNotEmpty()) vm.applyScannedIsbn(entryIsbn) }
                 BookFormScreen(onBack = { nav.popBackStack() }, onScan = { nav.navigate("scanner/book") }, vm = vm)
             }
             composable("people") {
@@ -167,10 +173,7 @@ fun AppNav(hasSchool: Boolean) {
                                     nav.navigate("return")
                                     nav.currentBackStackEntry?.savedStateHandle?.set("scan_return_copy", code)
                                 }
-                                UniversalScanAction.REGISTER_ISBN -> {
-                                    nav.navigate("book/new")
-                                    nav.currentBackStackEntry?.savedStateHandle?.set("scan_book", code)
-                                }
+                                UniversalScanAction.REGISTER_ISBN -> nav.navigate(BookScanRoute.forIsbn(code))
                                 UniversalScanAction.CATALOG, UniversalScanAction.MANUAL_SEARCH -> nav.navigate("catalog")
                             }
                         }
