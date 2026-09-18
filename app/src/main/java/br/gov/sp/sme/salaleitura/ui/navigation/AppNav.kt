@@ -84,21 +84,14 @@ fun AppNav(hasSchool: Boolean) {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("setup") {
-                SchoolSetupScreen(onFinished = {
-                    nav.navigate("dashboard") { popUpTo("setup") { inclusive = true } }
-                })
+                SchoolSetupScreen(onFinished = { nav.navigate("dashboard") { popUpTo("setup") { inclusive = true } } })
             }
             composable("dashboard") {
-                DashboardScreen(onNavigate = { action ->
-                    HomeRoutes.destinations(action).forEach { nav.navigate(it) }
-                })
+                DashboardScreen(onNavigate = { action -> HomeRoutes.destinations(action).forEach { nav.navigate(it) } })
             }
-            composable("catalog") {
-                CatalogScreen(onBack = { nav.popBackStack() }, onAdd = { nav.navigate("book/new") })
-            }
+            composable("catalog") { CatalogScreen(onBack = { nav.popBackStack() }, onAdd = { nav.navigate("book/new") }) }
             composable("book/new?isbn={isbn}", arguments = listOf(navArgument("isbn") {
-                type = NavType.StringType
-                defaultValue = ""
+                type = NavType.StringType; defaultValue = ""
             })) { entry ->
                 val vm: CatalogViewModel = viewModel(viewModelStoreOwner = entry)
                 ConsumeScan(entry, "scan_book") { vm.applyScannedIsbn(it) }
@@ -107,54 +100,49 @@ fun AppNav(hasSchool: Boolean) {
                 BookFormScreen(onBack = { nav.popBackStack() }, onScan = { nav.navigate("scanner/book") }, vm = vm)
             }
             composable("people") {
-                PeopleScreen(
-                    onBack = { nav.popBackStack() }, onAdd = { nav.navigate("people/new") },
-                    onClasses = { nav.navigate("classes") }, onImport = { nav.navigate("people/import") }
-                )
+                PeopleScreen(onBack = { nav.popBackStack() }, onAdd = { nav.navigate("people/new") },
+                    onClasses = { nav.navigate("classes") }, onImport = { nav.navigate("people/import") },
+                    onEdit = { nav.navigate("people/edit/$it") })
             }
-            composable("people/new") { PersonFormScreen(onBack = { nav.popBackStack() }) }
-            composable("classes") { ClassGroupScreen(onBack = { nav.popBackStack() }) }
+            composable("people/new?classId={classId}", arguments = listOf(navArgument("classId") {
+                type = NavType.LongType; defaultValue = -1L
+            })) { entry ->
+                val classId = entry.arguments?.getLong("classId")?.takeIf { it > 0 }
+                PersonFormScreen(onBack = { nav.popBackStack() }, initialClassId = classId)
+            }
+            composable("people/edit/{personId}", arguments = listOf(navArgument("personId") { type = NavType.LongType })) { entry ->
+                PersonFormScreen(onBack = { nav.popBackStack() }, personId = entry.arguments?.getLong("personId"))
+            }
+            composable("classes") {
+                ClassGroupScreen(onBack = { nav.popBackStack() }, onAddToClass = { nav.navigate("people/new?classId=$it") })
+            }
             composable("people/import") { CsvImportScreen(onBack = { nav.popBackStack() }) }
             composable("checkout") { entry ->
                 val vm: CirculationViewModel = viewModel(viewModelStoreOwner = entry)
-                ConsumeScan(entry, "scan_person") { vm.setPersonCode(it) }
                 ConsumeScan(entry, "scan_checkout_copy") { vm.setCopyCode(it) }
-                CheckoutScreen(
-                    onBack = { nav.popBackStack() }, onScanPerson = { nav.navigate("scanner/person") },
-                    onScanCopy = { nav.navigate("scanner/checkout_copy") }, vm = vm
-                )
+                CheckoutScreen(onBack = { nav.popBackStack() }, onScanCopy = { nav.navigate("scanner/checkout_copy") },
+                    onManageReaders = { nav.navigate("classes") }, vm = vm)
             }
             composable("return") { entry ->
                 val vm: CirculationViewModel = viewModel(viewModelStoreOwner = entry)
-                ConsumeScan(entry, "scan_return_copy") {
-                    vm.setReturnCopyCode(it)
-                    vm.resolveReturn()
-                }
+                ConsumeScan(entry, "scan_return_copy") { vm.setReturnCopyCode(it); vm.resolveReturn() }
                 ReturnScreen(onBack = { nav.popBackStack() }, onScanCopy = { nav.navigate("scanner/return_copy") }, vm = vm)
             }
             composable("loans") { LoansScreen(onBack = { nav.popBackStack() }) }
             composable("inventory") { entry ->
                 val vm: InventoryViewModel = viewModel(viewModelStoreOwner = entry)
-                ConsumeScan(entry, "scan_inventory") {
-                    vm.setCode(it)
-                    vm.scan()
-                }
+                ConsumeScan(entry, "scan_inventory") { vm.setCode(it); vm.scan() }
                 InventoryScreen(onBack = { nav.popBackStack() }, onScan = { nav.navigate("scanner/inventory") }, vm = vm)
             }
             composable("reports") { ReportsScreen(onBack = { nav.popBackStack() }) }
             composable("labels") { LabelsScreen(onBack = { nav.popBackStack() }) }
             composable("backup") { BackupScreen(onBack = { nav.popBackStack() }) }
             composable("settings") { SettingsScreen(onBack = { nav.popBackStack() }) }
-            composable("more") {
-                MoreMenuScreen(onBack = { nav.popBackStack() }, onNavigate = nav::navigate)
-            }
-            composable(
-                route = "scanner/{target}",
-                arguments = listOf(navArgument("target") { type = NavType.StringType })
-            ) { entry ->
+            composable("more") { MoreMenuScreen(onBack = { nav.popBackStack() }, onNavigate = nav::navigate) }
+            composable(route = "scanner/{target}", arguments = listOf(navArgument("target") { type = NavType.StringType })) { entry ->
                 val target = entry.arguments?.getString("target").orEmpty()
-                if (target == "universal") {
-                    UniversalScannerScreen(
+                when (target) {
+                    "universal" -> UniversalScannerScreen(
                         onBack = { nav.popBackStack() },
                         onAction = { action, code ->
                             nav.popBackStack()
@@ -162,12 +150,6 @@ fun AppNav(hasSchool: Boolean) {
                                 UniversalScanAction.CHECKOUT_COPY -> {
                                     nav.navigate("checkout")
                                     nav.currentBackStackEntry?.savedStateHandle?.set("scan_checkout_copy", code)
-                                    nav.navigate("scanner/person")
-                                }
-                                UniversalScanAction.CHECKOUT_PERSON -> {
-                                    nav.navigate("checkout")
-                                    nav.currentBackStackEntry?.savedStateHandle?.set("scan_person", code)
-                                    nav.navigate("scanner/checkout_copy")
                                 }
                                 UniversalScanAction.RETURN_COPY -> {
                                     nav.navigate("return")
@@ -178,19 +160,21 @@ fun AppNav(hasSchool: Boolean) {
                             }
                         }
                     )
-                } else {
-                    BarcodeScannerScreen(
-                        title = scannerTitle(target),
-                        onBack = { nav.popBackStack() },
+                    // No route may launch a camera to identify a student or professional.
+                    "person" -> MoreMenuScreen(onBack = { nav.popBackStack() }, onNavigate = nav::navigate)
+                    else -> BarcodeScannerScreen(
+                        title = scannerTitle(target), onBack = { nav.popBackStack() },
                         onScanned = { result ->
                             val value = when (result) {
                                 is ScanResult.Isbn -> result.isbn13
                                 is ScanResult.Copy -> result.code
-                                is ScanResult.Person -> result.code
-                                is ScanResult.Unknown -> result.raw
+                                is ScanResult.Person -> null
+                                is ScanResult.Unknown -> result.raw.takeUnless { it.startsWith("PERSON:", true) || it.startsWith("P-", true) }
                             }
-                            nav.previousBackStackEntry?.savedStateHandle?.set("scan_$target", value)
-                            nav.popBackStack()
+                            if (value != null) {
+                                nav.previousBackStackEntry?.savedStateHandle?.set("scan_$target", value)
+                                nav.popBackStack()
+                            }
                         }
                     )
                 }
@@ -212,12 +196,8 @@ private fun ReadingRoomBottomBar(current: String, navigate: (String) -> Unit) {
     )
     NavigationBar {
         destinations.forEach { item ->
-            NavigationBarItem(
-                selected = current == item.route,
-                onClick = { navigate(item.route) },
-                icon = { Icon(item.icon, contentDescription = null) },
-                label = { Text(item.label) }, alwaysShowLabel = true
-            )
+            NavigationBarItem(selected = current == item.route, onClick = { navigate(item.route) },
+                icon = { Icon(item.icon, contentDescription = null) }, label = { Text(item.label) }, alwaysShowLabel = true)
         }
     }
 }
@@ -226,24 +206,16 @@ private fun ReadingRoomBottomBar(current: String, navigate: (String) -> Unit) {
 private fun ConsumeScan(entry: NavBackStackEntry, key: String, onValue: (String) -> Unit) {
     val value by entry.savedStateHandle.getStateFlow<String?>(key, null).collectAsStateWithLifecycle()
     LaunchedEffect(value) {
-        value?.let {
-            onValue(it)
-            entry.savedStateHandle[key] = null
-        }
+        value?.let { onValue(it); entry.savedStateHandle[key] = null }
     }
 }
 
 @Composable
 private fun MoreMenuScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
-    Scaffold(topBar = {
-        TopAppBar(title = { Text("Mais ferramentas") }, navigationIcon = { TextButton(onClick = onBack) { Text("Voltar") } })
-    }) { padding ->
-        Column(
-            modifier = Modifier.padding(padding).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+    Scaffold(topBar = { TopAppBar(title = { Text("Mais ferramentas") }, navigationIcon = { TextButton(onClick = onBack) { Text("Voltar") } }) }) { padding ->
+        Column(modifier = Modifier.padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = { onNavigate("reports") }, modifier = Modifier.fillMaxWidth()) { Text("Relatórios locais") }
-            OutlinedButton(onClick = { onNavigate("labels") }, modifier = Modifier.fillMaxWidth()) { Text("Etiquetas e QR Codes") }
+            OutlinedButton(onClick = { onNavigate("labels") }, modifier = Modifier.fillMaxWidth()) { Text("Etiquetas de exemplares") }
             OutlinedButton(onClick = { onNavigate("backup") }, modifier = Modifier.fillMaxWidth()) { Text("Backup e restauração") }
             OutlinedButton(onClick = { onNavigate("settings") }, modifier = Modifier.fillMaxWidth()) { Text("Configurações e atualização ISBN") }
         }
@@ -252,7 +224,6 @@ private fun MoreMenuScreen(onBack: () -> Unit, onNavigate: (String) -> Unit) {
 
 private fun scannerTitle(target: String) = when (target) {
     "book" -> "Escanear ISBN/EAN"
-    "person" -> "Escanear pessoa"
     "checkout_copy", "return_copy", "inventory" -> "Escanear exemplar"
-    else -> "Escanear código"
+    else -> "Escanear código de livro"
 }
