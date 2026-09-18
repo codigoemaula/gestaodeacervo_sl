@@ -35,7 +35,13 @@ object Isbn {
         if (!value.all(Char::isDigit)) return IsbnResult.Invalid("ISBN-13 contém caracteres inválidos")
         if (!value.startsWith("978") && !value.startsWith("979")) return IsbnResult.Invalid("Prefixo ISBN-13 deve ser 978 ou 979")
         if (checkDigit13(value.take(12)) != value.last().digitToInt()) return IsbnResult.Invalid("Dígito verificador ISBN-13 inválido")
-        return IsbnResult.Valid(isbn13 = value)
+        val equivalent10 = if (value.startsWith("978")) {
+            val first9 = value.substring(3, 12)
+            val weighted = first9.mapIndexed { index, digit -> digit.digitToInt() * (10 - index) }.sum()
+            val check = (11 - weighted % 11) % 11
+            first9 + if (check == 10) "X" else check.toString()
+        } else null
+        return IsbnResult.Valid(isbn13 = value, isbn10 = equivalent10)
     }
 
     private fun checkDigit13(first12: String): Int {
