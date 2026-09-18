@@ -11,7 +11,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 
-/** Continuous camera with a decision panel; choosing an action never commits circulation. */
+/** Camera only identifies books and physical copies; choosing an action never commits circulation. */
 @Composable
 fun UniversalScannerScreen(
     onBack: () -> Unit,
@@ -20,7 +20,7 @@ fun UniversalScannerScreen(
 ) {
     val state by vm.scan.collectAsStateWithLifecycle()
     Box(Modifier.fillMaxSize()) {
-        BarcodeScannerScreen(title = "Escanear · Sala de Leitura", onBack = onBack, onScanned = vm::accept)
+        BarcodeScannerScreen(title = "Ler livro ou exemplar", onBack = onBack, onScanned = vm::accept)
         state?.let { result ->
             ElevatedCard(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp, vertical = 18.dp),
@@ -49,8 +49,7 @@ fun UniversalScannerScreen(
 private fun UniversalScanAction.label(): String = when (this) {
     UniversalScanAction.CHECKOUT_COPY -> "Emprestar este exemplar"
     UniversalScanAction.RETURN_COPY -> "Devolver este exemplar"
-    UniversalScanAction.CHECKOUT_PERSON -> "Emprestar para este leitor"
     UniversalScanAction.REGISTER_ISBN -> "Abrir cadastro da obra"
     UniversalScanAction.CATALOG -> "Consultar acervo"
-    UniversalScanAction.MANUAL_SEARCH -> "Buscar manualmente"
+    UniversalScanAction.MANUAL_SEARCH -> "Buscar exemplar no acervo"
 }
