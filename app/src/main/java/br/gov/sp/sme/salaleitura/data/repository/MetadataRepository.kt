@@ -16,6 +16,7 @@ class MetadataRepository(
 ) {
     private val system = db.systemDao()
     private val resolver = MetadataLookupEngine(listOf(
+        "BrasilAPI (CBL / Mercado Editorial)" to BrasilApiIsbnService(),
         "Open Library (catálogo)" to primary,
         "Open Library (edição ISBN)" to OpenLibraryIsbnService(),
         "Google Books" to fallback,
@@ -29,7 +30,7 @@ class MetadataRepository(
             else -> null
         }
 
-    /** The user may explicitly refresh a record; offline failures never destroy valid cached data. */
+    /** An explicit refresh is possible; offline errors never erase previously verified cached metadata. */
     suspend fun lookupDetailed(
         isbn13: String,
         now: Long = System.currentTimeMillis(),
@@ -48,7 +49,6 @@ class MetadataRepository(
             system.putMetadata(MetadataCacheEntity(isbn13, result.book.source, encode(result.book), now))
             return result
         }
-        // A transient network failure or catalog gap does not erase a bibliographic record already stored offline.
         return cached?.let { MetadataLookupResult.Found(it.copy(source = "${it.source} (cache local)")) } ?: result
     }
 
