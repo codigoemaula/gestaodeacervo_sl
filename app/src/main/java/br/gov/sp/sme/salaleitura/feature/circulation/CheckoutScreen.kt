@@ -27,7 +27,10 @@ fun CheckoutScreen(onBack: () -> Unit, onScanCopy: () -> Unit, onManageReaders: 
     val s by vm.checkout.collectAsStateWithLifecycle()
     val groups by vm.classes.collectAsStateWithLifecycle()
     val people by vm.readers.collectAsStateWithLifecycle()
+    val editions by vm.editions.collectAsStateWithLifecycle()
     var search by remember(s.selectedClassId) { mutableStateOf("") }
+    var bookSearch by remember { mutableStateOf("") }
+    var showCatalog by remember { mutableStateOf(false) }
     val matching = people.filter { person ->
         person.active && when (s.selectedClassId) {
             ReaderGroup.PROFESSIONALS -> person.type == PersonType.PROFESSIONAL
@@ -82,12 +85,40 @@ fun CheckoutScreen(onBack: () -> Unit, onScanCopy: () -> Unit, onManageReaders: 
             }
             HorizontalDivider()
             Text("3. Identifique o exemplar", style = MaterialTheme.typography.titleMedium)
-            OutlinedTextField(s.copyCode, vm::setCopyCode, label = { Text("Código do exemplar") }, modifier = Modifier.fillMaxWidth())
-            OutlinedButton(onClick = onScanCopy, modifier = Modifier.fillMaxWidth()) { Text("Câmera · ler somente exemplar") }
+            Text("O código interno ou patrimônio identifica um exemplar. O ISBN identifica a edição; se houver vários exemplares, escolha o volume físico abaixo.",
+                style = MaterialTheme.typography.bodySmall)
+            OutlinedTextField(s.copyCode, vm::setCopyCode, label = { Text("Código do exemplar, patrimônio ou ISBN") }, modifier = Modifier.fillMaxWidth())
+            OutlinedButton(onClick = onScanCopy, modifier = Modifier.fillMaxWidth()) { Text("Câmera · ler somente exemplar ou ISBN") }
             Button(onClick = vm::resolveCheckout, modifier = Modifier.fillMaxWidth(), enabled = s.person != null && s.copyCode.isNotBlank()) {
-                Text("Conferir empréstimo")
+                Text("Localizar exemplar no acervo")
             }
-            s.copy?.let { Text("Exemplar: ${it.internalCode} · ${it.status.name}") }
+            OutlinedButton(onClick = { showCatalog = !showCatalog }, enabled = s.person != null, modifier = Modifier.fillMaxWidth()) {
+                Text(if (showCatalog) "Ocultar obras do acervo" else "Selecionar obra cadastrada no acervo")
+            }
+            if (showCatalog && s.person != null) {
+                OutlinedTextField(bookSearch, { bookSearch = it }, label = { Text("Buscar por título, autoria ou ISBN") },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                val found = editions.filter { edition ->
+                    bookSearch.isBlank() || listOfNotNull(edition.title, edition.authors, edition.isbn13, edition.isbn10)
+                        .any { it.contains(bookSearch.trim(), ignoreCase = true) }
+                }
+                if (found.isEmpty()) Text("Nenhuma obra cadastrada corresponde à busca.")
+                found.take(20).forEach { edition ->
+                    OutlinedButton(onClick = { vm.selectEditionForCheckout(edition.id); showCatalog = false }, modifier = Modifier.fillMaxWidth()) {
+                        Text("${edition.title}${edition.isbn13?.let { " · $it" }.orEmpty()}")
+                    }
+                }
+                if (found.size > 20) Text("Refine a busca para localizar a obra.", style = MaterialTheme.typography.bodySmall)
+            }
+            if (s.candidateCopies.isNotEmpty()) {
+                Text("Escolha o exemplar físico: ${s.candidateTitle.orEmpty()}", style = MaterialTheme.typography.titleMedium)
+                s.candidateCopies.forEach { candidate ->
+                    OutlinedButton(onClick = { vm.chooseCopy(candidate.id) }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Exemplar ${candidate.sequence} · ${candidate.internalCode}${candidate.location?.let { " · $it" }.orEmpty()}")
+                    }
+                }
+            }
+            s.copy?.let { Text("Exemplar selecionado: ${it.internalCode} · ${it.status.name}") }
             Text("4. Prazo deste exemplar", style = MaterialTheme.typography.titleMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(s.period == LoanPeriod.SEVEN, { vm.selectPeriod(LoanPeriod.SEVEN) }, label = { Text("7 dias") })
@@ -113,10 +144,12 @@ fun CheckoutScreen(onBack: () -> Unit, onScanCopy: () -> Unit, onManageReaders: 
             }
             s.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             s.message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
-            Button(onClick = vm::checkout, enabled = s.person != null && s.copy != null && (s.overdue.isEmpty() || s.teacherConfirmedException), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = vm::checkout,
+                enabled = s.person != null && s.copy != null && s.error == null && (s.overdue.isEmpty() || s.teacherConfirmedException),
+                modifier = Modifier.fillMaxWidth()) {
                 Text("Confirmar empréstimo deste exemplar")
             }
-            if (s.message != null && s.copy == null && s.person != null) {
+            if (s.message != null && s.copy == null && s.person != null && s.candidateCopies.isEmpty()) {
                 FilledTonalButton(onClick = onScanCopy, modifier = Modifier.fillMaxWidth()) { Text("Escanear próximo exemplar") }
             }
         }
