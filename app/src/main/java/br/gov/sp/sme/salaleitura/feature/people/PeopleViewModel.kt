@@ -43,6 +43,18 @@ class PeopleViewModel(application: Application) : AndroidViewModel(application) 
         onLoaded(db.peopleDao().personById(id))
     }
 
+    /** Anonymization is blocked while loans remain open. Photos are deleted from private storage. */
+    fun removePersonalData(id: Long, onDone: () -> Unit = {}) = viewModelScope.launch {
+        _personError.value = null
+        try {
+            val previousPhoto = repo.removeReaderData(id)
+            photos.remove(previousPhoto)
+            onDone()
+        } catch (ex: Exception) {
+            _personError.value = ex.message ?: "Não foi possível remover os dados pessoais."
+        }
+    }
+
     /** Stable person ID keeps previous loans; new images are copied privately before DB commit. */
     fun savePerson(
         id: Long?, name: String, type: PersonType, institutionalId: String?, classId: Long?,
@@ -54,6 +66,7 @@ class PeopleViewModel(application: Application) : AndroidViewModel(application) 
         try {
             require(name.isNotBlank()) { "Informe o nome" }
             val original = id?.let { requireNotNull(db.peopleDao().personById(it)) { "Cadastro não encontrado" } }
+            require(original?.active != false) { "Cadastro já removido." }
             newPhoto = photo?.let { photos.importPhoto(it) }
             val filename = when {
                 newPhoto != null -> newPhoto
