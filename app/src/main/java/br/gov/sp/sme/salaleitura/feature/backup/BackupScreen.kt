@@ -3,6 +3,7 @@
 package br.gov.sp.sme.salaleitura.feature.backup
 
 import android.app.Activity
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -72,7 +73,13 @@ fun BackupScreen(onBack: () -> Unit) {
                     try {
                         manager.restore(uri, secret, allowLegacy).onSuccess {
                             message = "Restauração concluída."
-                            (context as? Activity)?.recreate()
+                            // Destroy the old Activity and retained ViewModels, which reference the closed database.
+                            val entry = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                            if (entry != null) {
+                                entry.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                                context.startActivity(entry)
+                                (context as? Activity)?.finish()
+                            } else (context as? Activity)?.recreate()
                         }.onFailure { message = "Falha: ${it.message}" }
                     } finally { secret.fill('\u0000'); busy = false }
                 }
