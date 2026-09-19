@@ -5,7 +5,7 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LegalInfoContentTest {
-    @Test fun `policy explains local storage and third-party ISBN queries without claiming offline means LGPD exemption`() {
+    @Test fun `policy explains local storage and third-party ISBN queries and states LGPD still applies`() {
         val text = LegalInfoContent.privacySections.joinToString(" ") { it.second }
         assertTrue(text.contains("LGPD"))
         assertTrue(text.contains("ISBN"))
@@ -13,7 +13,9 @@ class LegalInfoContentTest {
         assertTrue(text.contains("endereço IP"))
         assertTrue(text.contains("Exportações"))
         assertTrue(text.contains("foto"))
-        assertTrue(text.contains("não significa estar isento da LGPD", ignoreCase = true))
+        assertTrue(text.contains("uso offline não dispensa sua observância", ignoreCase = true))
+        assertFalse(text.contains("LGPD não se aplica", ignoreCase = true))
+        assertTrue(text.contains("backup inclui banco de dados e fotos opcionais", ignoreCase = true))
     }
 
     @Test fun `about credits independent project without institutional endorsement`() {
