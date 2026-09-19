@@ -19,6 +19,20 @@ class PeopleRepository(private val db: AppDatabase) {
         return dao.insertPerson(value.copy(id = 0, internalCode = code))
     }
 
+    /** Irreversible removal is refused with open loans and keeps loan foreign keys when a history exists. */
+    suspend fun removeReaderData(id: Long): String? = db.withTransaction {
+        val reader = requireNotNull(dao.personById(id)) { "Leitor não encontrado." }
+        require(reader.active) { "O cadastro já foi removido." }
+        val active = dao.activeLoansForPerson(id)
+        require(active == 0) { "Há $active empréstimo(s) ativo(s). Registre a devolução antes da remoção." }
+        if (dao.historyForPerson(id) == 0) {
+            dao.deletePerson(reader)
+        } else {
+            dao.updatePerson(ReaderPrivacyPolicy.anonymize(reader, false))
+        }
+        reader.photoFilename
+    }
+
     suspend fun previewCsv(rows: List<PersonImportRow>): CsvPlan {
         val people = dao.allPeople()
         val groups = dao.allClassGroups()
