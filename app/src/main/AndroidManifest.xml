@@ -3,7 +3,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
-    <application android:allowBackup="false" android:label="Sala de Leitura"
+    <application android:allowBackup="false"
+        android:usesCleartextTraffic="false"
+        android:label="Sala de Leitura"
         android:icon="@drawable/ic_sala_leitura"
         android:roundIcon="@drawable/ic_sala_leitura"
         android:theme="@style/Theme.SalaLeitura">
