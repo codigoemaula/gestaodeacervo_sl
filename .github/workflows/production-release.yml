@@ -1,0 +1,74 @@
+name: Sala de Leitura - Release Segura
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Ensure Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | head -n 1)"; fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Check signing credentials (never print their values)
+        shell: bash
+        env:
+          RELEASE_KEYSTORE_B64: ${{ secrets.SALA_RELEASE_KEYSTORE_B64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.SALA_RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.SALA_RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.SALA_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in RELEASE_KEYSTORE_B64 RELEASE_STORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD; do
+            if [ -z "${!variable}" ]; then
+              echo "A release requer todos os segredos de assinatura configurados no repositório. Nenhum APK de produção foi gerado."
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$RELEASE_KEYSTORE_B64" | base64 --decode > "${RUNNER_TEMP}/sala-release.jks"
+          test -s "${RUNNER_TEMP}/sala-release.jks"
+      - name: Compile, run tests and sign production release
+        shell: bash
+        env:
+          SALA_RELEASE_KEYSTORE: ${{ runner.temp }}/sala-release.jks
+          SALA_RELEASE_STORE_PASSWORD: ${{ secrets.SALA_RELEASE_STORE_PASSWORD }}
+          SALA_RELEASE_KEY_ALIAS: ${{ secrets.SALA_RELEASE_KEY_ALIAS }}
+          SALA_RELEASE_KEY_PASSWORD: ${{ secrets.SALA_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleRelease
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK"
+          sha256sum "$APK"
+      - name: Remove temporary signing key
+        if: always()
+        shell: bash
+        run: rm -f "${RUNNER_TEMP}/sala-release.jks"
+      - name: Upload signed APK only after successful verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalaDeLeitura-1.2.0-release-assinada
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 30
