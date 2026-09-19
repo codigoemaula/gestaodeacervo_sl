@@ -1,7 +1,7 @@
 name: Build Sala Leitura V1.1
 on:
   push:
-    branches: ['feature/sala-leitura-v11']
+    branches: ['feature/sala-leitura-v11', 'feature/lgpd-eca-digital-production']
     paths:
       - 'app/**'
       - 'build.gradle.kts'
