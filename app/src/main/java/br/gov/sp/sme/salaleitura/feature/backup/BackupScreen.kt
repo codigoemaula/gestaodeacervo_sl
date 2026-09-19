@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import java.text.DateFormat
@@ -24,26 +25,56 @@ fun BackupScreen(onBack: () -> Unit) {
     val manager = remember { BackupManager(context) }
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf<String?>(null) }
+    var exportPassword by remember { mutableStateOf("") }
+    var exportConfirmation by remember { mutableStateOf("") }
+    var restorePassword by remember { mutableStateOf("") }
+    var allowLegacy by remember { mutableStateOf(false) }
     var pending by remember { mutableStateOf<Pair<Uri, BackupManifest>?>(null) }
-    val create = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
-        uri?.let { scope.launch { message = manager.exportTo(it).fold({ "Backup criado com sucesso" }, { "Falha: ${it.message}" }) } }
+    var busy by remember { mutableStateOf(false) }
+
+    val create = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) {
+            val secret = exportPassword.toCharArray()
+            exportPassword = ""
+            exportConfirmation = ""
+            busy = true
+            scope.launch {
+                try {
+                    message = manager.exportTo(uri, secret).fold({ "Backup criptografado criado, incluindo fotos opcionais." }, { "Falha: ${it.message}" })
+                } finally { secret.fill('\u0000'); busy = false }
+            }
+        }
     }
     val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { scope.launch { manager.inspect(it).onSuccess { manifest -> pending = it to manifest }.onFailure { error -> message = "Backup inválido: ${error.message}" } } }
+        if (uri != null) {
+            val secret = restorePassword.toCharArray()
+            busy = true
+            scope.launch {
+                try {
+                    manager.inspect(uri, secret, allowLegacy).onSuccess { pending = uri to it }
+                        .onFailure { message = "Backup inválido ou senha incorreta: ${it.message}" }
+                } finally { secret.fill('\u0000'); busy = false }
+            }
+        }
     }
     if (pending != null) {
         val (uri, manifest) = pending!!
         AlertDialog(
             onDismissRequest = { pending = null },
             title = { Text("Confirmar restauração") },
-            text = { Text("Substituir todos os dados atuais por '${manifest.schoolName}', backup de ${DateFormat.getDateTimeInstance().format(Date(manifest.createdAt))}? As fotos opcionais não estão incluídas neste backup.") },
+            text = { Text("Substituir TODOS os dados atuais por '${manifest.schoolName}', backup de ${DateFormat.getDateTimeInstance().format(Date(manifest.createdAt))}? ${if (manifest.schemaVersion >= 2) "As fotografias também serão restauradas." else "ATENÇÃO: backup antigo sem fotos e sem criptografia; fotografias anteriores podem ficar inconsistentes."} Faça uma cópia de segurança atual antes de continuar.") },
             confirmButton = { TextButton(onClick = {
                 pending = null
+                val secret = restorePassword.toCharArray()
+                restorePassword = ""
+                busy = true
                 scope.launch {
-                    manager.restore(uri).onSuccess {
-                        message = "Restauração concluída"
-                        (context as? Activity)?.recreate()
-                    }.onFailure { message = "Falha: ${it.message}" }
+                    try {
+                        manager.restore(uri, secret, allowLegacy).onSuccess {
+                            message = "Restauração concluída."
+                            (context as? Activity)?.recreate()
+                        }.onFailure { message = "Falha: ${it.message}" }
+                    } finally { secret.fill('\u0000'); busy = false }
                 }
             }) { Text("Restaurar") } },
             dismissButton = { TextButton(onClick = { pending = null }) { Text("Cancelar") } }
@@ -51,10 +82,18 @@ fun BackupScreen(onBack: () -> Unit) {
     }
     Scaffold(topBar = { TopAppBar(title = { Text("Backup e restauração") }, navigationIcon = { TextButton(onClick = onBack) { Text("Voltar") } }) }) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("O backup é criado apenas quando solicitado e salvo no destino que você escolher. Nenhum arquivo é enviado automaticamente à nuvem.")
-            Text("Atenção: o backup contém cadastros e histórico de circulação, mas NÃO inclui as fotos opcionais. Proteja o arquivo exportado e não apague a instalação anterior antes de conferir a migração.", color = MaterialTheme.colorScheme.error)
-            Button(onClick = { scope.launch { create.launch(manager.suggestedName()) } }, modifier = Modifier.fillMaxWidth()) { Text("Exportar .slbackup") }
-            OutlinedButton(onClick = { open.launch(arrayOf("application/zip", "application/octet-stream", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("Restaurar backup") }
+            Text("Backup manual completo: banco de dados e fotografias opcionais. O arquivo é protegido com senha e criptografia; não há envio automático para a nuvem.")
+            Text("Guarde a senha separadamente. Sem ela, não é possível recuperar um backup criptografado.")
+            OutlinedTextField(exportPassword, { exportPassword = it }, label = { Text("Criar senha do backup (mínimo de 10 caracteres)") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(exportConfirmation, { exportConfirmation = it }, label = { Text("Confirmar senha") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+            Button(onClick = { scope.launch { create.launch(manager.suggestedName()) } }, enabled = !busy && exportPassword.length >= 10 && exportPassword == exportConfirmation, modifier = Modifier.fillMaxWidth()) { Text("Exportar backup criptografado") }
+            HorizontalDivider()
+            Text("Restaurar um backup", style = MaterialTheme.typography.titleMedium)
+            OutlinedTextField(restorePassword, { restorePassword = it }, label = { Text("Senha do backup") }, visualTransformation = PasswordVisualTransformation(), singleLine = true, modifier = Modifier.fillMaxWidth())
+            Row { Checkbox(checked = allowLegacy, onCheckedChange = { allowLegacy = it }); Text("Importar backup antigo SEM criptografia (somente para migrar arquivos anteriores)", modifier = Modifier.padding(top = 10.dp)) }
+            if (allowLegacy) Text("Arquivo antigo pode conter dados pessoais legíveis e não inclui fotos. Após importar, crie imediatamente um novo backup criptografado.", color = MaterialTheme.colorScheme.error)
+            OutlinedButton(onClick = { open.launch(arrayOf("application/octet-stream", "application/zip", "*/*")) }, enabled = !busy && (restorePassword.length >= 10 || allowLegacy), modifier = Modifier.fillMaxWidth()) { Text("Selecionar arquivo para restauração") }
+            if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
             message?.let { Text(it) }
         }
     }
