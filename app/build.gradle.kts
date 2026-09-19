@@ -4,17 +4,39 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val productionKeystore = providers.environmentVariable("SALA_RELEASE_KEYSTORE").orNull
+
 android {
+    // Namespace stays stable to preserve generated classes and existing Room migration code.
+    // The installable app ID no longer suggests affiliation with a government organization.
     namespace = "br.gov.sp.sme.salaleitura"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "br.gov.sp.sme.salaleitura"
+        applicationId = "com.codigoemaula.salaleitura"
         minSdk = 23
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    if (!productionKeystore.isNullOrBlank()) {
+        signingConfigs {
+            create("production") {
+                storeFile = file(productionKeystore)
+                storePassword = providers.environmentVariable("SALA_RELEASE_STORE_PASSWORD").orNull
+                keyAlias = providers.environmentVariable("SALA_RELEASE_KEY_ALIAS").orNull
+                keyPassword = providers.environmentVariable("SALA_RELEASE_KEY_PASSWORD").orNull
+            }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isDebuggable = false
+            isMinifyEnabled = false
+            if (!productionKeystore.isNullOrBlank()) signingConfig = signingConfigs.getByName("production")
+        }
     }
 
     buildFeatures { compose = true }
@@ -59,7 +81,6 @@ dependencies {
     implementation("com.google.zxing:core:3.5.4")
 
     testImplementation("junit:junit:4.13.2")
-    // Android's org.json is stubbed in local unit tests; test real API payload parsing.
     testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
