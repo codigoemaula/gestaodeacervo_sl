@@ -21,9 +21,17 @@ fun PeopleScreen(onBack: () -> Unit, onAdd: () -> Unit, onClasses: () -> Unit, o
     val people by vm.people.collectAsStateWithLifecycle()
     val groups by vm.classes.collectAsStateWithLifecycle()
     var exportMessage by remember { mutableStateOf<String?>(null) }
+    var confirmExport by remember { mutableStateOf(false) }
     val export = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
         uri?.let { vm.saveCsv(it, onResult = { result -> exportMessage = result }) }
     }
+    if (confirmExport) AlertDialog(
+        onDismissRequest = { confirmExport = false },
+        title = { Text("Exportar dados pessoais sem criptografia?") },
+        text = { Text("O CSV contém nomes e outros dados de estudantes e profissionais. O arquivo NÃO é criptografado: quem tiver acesso ao destino escolhido poderá copiá-lo ou enviá-lo. Utilize apenas quando necessário e selecione um local protegido.") },
+        confirmButton = { TextButton(onClick = { confirmExport = false; export.launch("leitores-sala-de-leitura.csv") }) { Text("Exportar CSV") } },
+        dismissButton = { TextButton(onClick = { confirmExport = false }) { Text("Cancelar") } }
+    )
     Scaffold(topBar = { TopAppBar(title = { Text("Leitores e turmas") }, navigationIcon = { TextButton(onClick = onBack) { Text("Voltar") } }) }) { padding ->
         Column(Modifier.padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Cadastros da Sala de Leitura", style = MaterialTheme.typography.titleLarge)
@@ -34,7 +42,7 @@ fun PeopleScreen(onBack: () -> Unit, onAdd: () -> Unit, onClasses: () -> Unit, o
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f)) { Text("Importar CSV") }
-                OutlinedButton(onClick = { export.launch("leitores-sala-de-leitura.csv") }, modifier = Modifier.weight(1f)) { Text("Exportar CSV") }
+                OutlinedButton(onClick = { confirmExport = true }, modifier = Modifier.weight(1f)) { Text("Exportar CSV") }
             }
             exportMessage?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
             Text("${people.size} cadastro(s)", style = MaterialTheme.typography.titleSmall)
