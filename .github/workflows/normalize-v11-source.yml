@@ -1,0 +1,50 @@
+name: Normalize Sala Leitura V1.1 sources
+on:
+  push:
+    branches: ['feature/sala-leitura-v11']
+    paths: ['.github/workflows/normalize-v11-source.yml']
+permissions:
+  contents: write
+jobs:
+  normalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - name: Reconstruct verified V1 baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat ci/source.b64.part* | base64 --decode > "$RUNNER_TEMP/v1.tar.gz"
+          echo "0ffbf6f4d26580016393183d7ee36443bf1e9e3331fa2a18f1705efbee5414c5  $RUNNER_TEMP/v1.tar.gz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/v1"
+          tar -xzf "$RUNNER_TEMP/v1.tar.gz" -C "$RUNNER_TEMP/v1"
+          cp -R ci/overlay/. "$RUNNER_TEMP/v1/"
+          for path in app build.gradle.kts settings.gradle.kts gradle.properties gradle gradlew gradlew.bat tools docs; do
+            cp -R "$RUNNER_TEMP/v1/$path" ./
+          done
+          FILE=app/build.gradle.kts
+          sed -i 's/compileSdk = 37/compileSdk = 36/' "$FILE"
+          sed -i 's/compose-bom:2026.08.00/compose-bom:2025.08.00/' "$FILE"
+          sed -i 's/navigation-compose:2.10.1/navigation-compose:2.9.5/' "$FILE"
+          sed -i 's/lifecycle-runtime-compose:2.10.0/lifecycle-runtime-compose:2.9.4/' "$FILE"
+          sed -i 's/lifecycle-viewmodel-compose:2.10.0/lifecycle-viewmodel-compose:2.9.4/' "$FILE"
+          sed -i 's/room-runtime:2.8.5/room-runtime:2.8.1/' "$FILE"
+          sed -i 's/room-ktx:2.8.5/room-ktx:2.8.1/' "$FILE"
+          sed -i 's/room-compiler:2.8.5/room-compiler:2.8.1/' "$FILE"
+          sed -i 's/camera-core:1.6.2/camera-core:1.5.1/' "$FILE"
+          sed -i 's/camera-camera2:1.6.2/camera-camera2:1.5.1/' "$FILE"
+          sed -i 's/camera-lifecycle:1.6.2/camera-lifecycle:1.5.1/' "$FILE"
+          sed -i 's/camera-view:1.6.2/camera-view:1.5.1/' "$FILE"
+          test -f app/src/main/java/br/gov/sp/sme/salaleitura/ui/navigation/AppNav.kt
+      - name: Commit readable sources in V1.1 branch
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app build.gradle.kts settings.gradle.kts gradle.properties gradle gradlew gradlew.bat tools docs
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: normalize compiled V1 baseline into editable source files'
+            git push origin HEAD:feature/sala-leitura-v11
+          fi

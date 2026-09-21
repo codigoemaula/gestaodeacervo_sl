@@ -1,0 +1,16 @@
+# Never commit signing credentials or exported personal data.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.slbackup
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+local.properties
+*.csv
+*.apk
+*.aab
+.gradle/
+**/build/
+.idea/

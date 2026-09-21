@@ -1,0 +1,53 @@
+name: Build Sala Leitura - Verificação Técnica
+on:
+  push:
+    branches: ['feature/sala-leitura-v11', 'feature/lgpd-eca-digital-production']
+    paths:
+      - 'app/**'
+      - 'build.gradle.kts'
+      - 'settings.gradle.kts'
+      - '.github/workflows/v11-debug-apk.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.0'
+      - name: Ensure Android SDK 36
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | head -n 1)"; fi
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null 2>&1 || true
+          "$SDKMANAGER" 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Test and compile debug and release variants
+        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease
+      - name: Check debug APK, release variant and debug signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -t "$APK" >/dev/null
+          "${ANDROID_HOME}/build-tools/36.0.0/apksigner" verify --verbose "$APK"
+          find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -size +0c | grep -q .
+          echo 'Release variant compiled. UNSIGNED RELEASE IS NOT A DISTRIBUTABLE PRODUCTION APK.'
+          sha256sum "$APK"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SalaLeitura-v11-debug-preview
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
